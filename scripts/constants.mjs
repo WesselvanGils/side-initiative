@@ -8,6 +8,14 @@ export const SIDE_STATE_FLAG = "state";
 export const COMBATANT_SIDE_FLAG = "sideId";
 /** @type {string} */
 export const COMBATANT_SIDE_SOURCE_FLAG = "sideSource";
+/** @type {string} */
+export const COMMANDER_CONTROL_SETTING = "commanderControl";
+
+/** @type {{ sideOwners: string, gmOnly: string }} */
+export const COMMANDER_CONTROL_OPTIONS = {
+    sideOwners: "side-owners",
+    gmOnly: "gm-only"
+};
 
 /** @type {readonly string[]} */
 export const DEFAULT_SIDE_ORDER = ["players", "allies", "neutral", "monsters"];
@@ -20,8 +28,9 @@ export const DEFAULT_SIDE_DATA = {
     monsters: { id: "monsters", name: "Monsters", color: "#b93a3a" }
 };
 
-/** @type {{ groupByDisposition: string, showTrackerControls: string }} */
+/** @type {{ groupByDisposition: string, showTrackerControls: string, commanderControl: string }} */
 export const SETTINGS = {
     groupByDisposition: "groupByDisposition",
-    showTrackerControls: "showTrackerControls"
+    showTrackerControls: "showTrackerControls",
+    commanderControl: COMMANDER_CONTROL_SETTING
 };

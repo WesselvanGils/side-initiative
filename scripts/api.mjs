@@ -4,8 +4,10 @@ import {
     getActiveSideId,
     getCombatState,
     getCombatantTurnIndex,
+    getCombatantSideId,
     getNextSideId,
     getOrderedSideIds,
+    getSideCommanderCombatant,
     getSideRepresentativeCombatant,
     getSideSummary,
     isActorOnActiveSide,
@@ -18,7 +20,7 @@ import {
     setCombatantSide,
     setCombatantSideSource
 } from "./logic.mjs";
-import { MODULE_ID } from "./constants.mjs";
+import { COMMANDER_CONTROL_OPTIONS, MODULE_ID, SETTINGS } from "./constants.mjs";
 
 /**
  * @param {object | null | undefined} combat
@@ -94,12 +96,35 @@ function getNextRoundDelta(currentSideId, nextSideId, direction = 1, sideIds = [
 }
 
 /**
+ * Determine whether a user can control a combatant as a commander.
+ * @param {object | null | undefined} combatant
+ * @param {object | null | undefined} user
+ * @returns {boolean}
+ */
+function canUserControlCombatant(combatant, user = game.user) {
+    if (!combatant || !user) return false;
+    if (user.isGM) return true;
+
+    const commanderControl = game.settings?.get?.(MODULE_ID, SETTINGS.commanderControl);
+    if (commanderControl === COMMANDER_CONTROL_OPTIONS.gmOnly) return false;
+
+    if (typeof combatant.testUserPermission === "function") {
+        return combatant.testUserPermission(user, "OWNER");
+    }
+    return Boolean(combatant.isOwner);
+}
+
+/**
  * Side initiative API surface.
  * @type {{
  *   MODULE_ID: string,
  *   refreshCombatantSides(combat?: object | null, options?: { overwrite?: boolean, groupByDisposition?: boolean }): Promise<object | null>,
  *   rollSideInitiative(combat?: object | null, options?: { random?: () => number }): Promise<object | null>,
  *   assignCombatantSide(combatant: object | null | undefined, sideId: string, options?: { source?: string }): Promise<string | null>,
+ *   setSideCommander(combat: object | null | undefined, combatant: object | null | undefined): Promise<object | null>,
+ *   getSideCommander(combat?: object | null, sideId?: string): object | null,
+ *   canUserSetCommander(combatant: object | null | undefined, user?: object | null): boolean,
+ *   canUserAdvanceSide(combat?: object | null, user?: object | null): boolean,
  *   setActiveSide(combat?: object | null, sideId: string): Promise<object | null>,
  *   advanceSide(combat?: object | null, direction?: number): Promise<object | null>,
  *   getSideState(combat?: object | null): Array<object> | null,
@@ -179,6 +204,51 @@ export const SideInitiativeAPI = {
         await setCombatantSide(combatant, sideId);
         await setCombatantSideSource(combatant, source);
         return sideId;
+    },
+
+    async setSideCommander(combat, combatant) {
+        const resolvedCombat = getCombatFromArgument(combat);
+        if (!resolvedCombat || !combatant) return null;
+
+        const sideId = getCombatantSideId(combatant);
+        if (!sideId) return null;
+
+        const state = getCombatState(resolvedCombat);
+        state.commanderIds = {
+            ...(state.commanderIds ?? {}),
+            [normalizeSideId(sideId)]: combatant.id
+        };
+
+        await setCombatState(resolvedCombat, cloneSideStateForSave(state, resolvedCombat.combatants));
+
+        if (getActiveSideId(resolvedCombat) === normalizeSideId(sideId)) {
+            await syncCombatToSide(resolvedCombat, sideId, { roundDelta: 0 });
+            return getCombatState(resolvedCombat);
+        }
+
+        return state;
+    },
+
+    getSideCommander(combat, sideId) {
+        const resolvedCombat = getCombatFromArgument(combat);
+        if (!resolvedCombat) return null;
+        return getSideCommanderCombatant(resolvedCombat, sideId);
+    },
+
+    canUserSetCommander(combatant, user = game.user) {
+        return canUserControlCombatant(combatant, user);
+    },
+
+    canUserAdvanceSide(combat, user = game.user) {
+        const resolvedCombat = getCombatFromArgument(combat);
+        if (!resolvedCombat || !resolvedCombat.started || !isSideCombat(resolvedCombat)) return false;
+        if (user?.isGM) return true;
+
+        const activeSideId = getActiveSideId(resolvedCombat);
+        if (!activeSideId) return false;
+        const commander = getSideRepresentativeCombatant(resolvedCombat, activeSideId);
+        if (!commander) return false;
+        return canUserControlCombatant(commander, user);
     },
 
     async setActiveSide(combat, sideId) {

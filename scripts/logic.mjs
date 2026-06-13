@@ -16,6 +16,7 @@ import {
  * @property {string[]} [combatantIds]
  * @property {number} [count]
  * @property {boolean} [active]
+ * @property {string | null} [commanderId]
  * @property {string} [tone]
  */
 
@@ -29,7 +30,10 @@ import {
  * @property {string | null} activeSideId
  * @property {number | null} activeSideIndex
  * @property {string | null} activeCombatantId
+ * @property {Record<string, string>} commanderIds
  */
+
+const COMBAT_STATE_VERSION = 2;
 
 /**
  * @typedef {object} WorkflowLike
@@ -159,15 +163,27 @@ export function getCombatState(combat) {
  */
 export function normalizeCombatState(raw = {}) {
     const state = {
-        version: 1,
+        version: COMBAT_STATE_VERSION,
         order: Array.isArray(raw?.order) ? raw.order.map(normalizeSideId) : [],
         sides: raw?.sides && typeof raw.sides === "object" ? { ...raw.sides } : {},
         lastRolledRound: raw?.lastRolledRound ?? null,
         lastRolls: raw?.lastRolls && typeof raw.lastRolls === "object" ? { ...raw.lastRolls } : {},
         activeSideId: raw?.activeSideId ? normalizeSideId(raw.activeSideId) : null,
         activeSideIndex: Number.isInteger(raw?.activeSideIndex) ? raw.activeSideIndex : null,
-        activeCombatantId: raw?.activeCombatantId ?? null
+        activeCombatantId: raw?.activeCombatantId ?? null,
+        commanderIds: {}
     };
+
+    if (raw?.commanderIds && typeof raw.commanderIds === "object") {
+        for (const [sideId, combatantId] of Object.entries(raw.commanderIds)) {
+            const normalizedSideId = normalizeSideId(sideId);
+            if (typeof combatantId === "string" && combatantId) {
+                state.commanderIds[normalizedSideId] = combatantId;
+            } else if (combatantId && typeof combatantId === "object" && typeof combatantId.id === "string") {
+                state.commanderIds[normalizedSideId] = combatantId.id;
+            }
+        }
+    }
 
     for (const [sideId, side] of Object.entries(state.sides)) {
         state.sides[normalizeSideId(sideId)] = normalizeSideData(sideId, side);
@@ -253,6 +269,20 @@ function getCombatTurnEntries(combat) {
 }
 
 /**
+ * Resolve combatant entries from a combat document or combatant collection.
+ * @param {object | Array<object> | null | undefined} source
+ * @returns {CombatantLike[]}
+ */
+function getCombatantEntries(source) {
+    if (Array.isArray(source)) return source;
+    const combatants = source?.combatants;
+    if (Array.isArray(combatants?.contents)) return combatants.contents;
+    if (typeof combatants?.values === "function") return Array.from(combatants.values());
+    if (typeof combatants?.[Symbol.iterator] === "function") return Array.from(combatants);
+    return Array.from(combatants ?? []);
+}
+
+/**
  * Resolve a combatant from an actor-like object.
  * @param {ActorLike | null | undefined} actor
  * @returns {CombatantLike | null}
@@ -284,7 +314,7 @@ export function hasSideMembers(combat, sideId) {
  */
 export function getCombatantsForSide(combat, sideId, { includeDefeated = true, groupByDisposition = true } = {}) {
     const normalizedId = normalizeSideId(sideId);
-    const combatants = Array.from(combat?.combatants ?? []);
+    const combatants = getCombatantEntries(combat);
     return combatants.filter((combatant) => {
         if (!includeDefeated && combatant.defeated) return false;
         return getCombatantSideId(combatant, { groupByDisposition }) === normalizedId;
@@ -298,7 +328,7 @@ export function getCombatantsForSide(combat, sideId, { includeDefeated = true, g
  * @returns {Map<string, SideData>}
  */
 export function collectCombatantSides(combat, { groupByDisposition = true } = {}) {
-    const combatants = Array.from(combat?.combatants ?? []);
+    const combatants = getCombatantEntries(combat);
     const sideMap = new Map();
 
     for (const combatant of combatants) {
@@ -320,7 +350,7 @@ export function collectCombatantSides(combat, { groupByDisposition = true } = {}
  * @returns {Promise<object | null | undefined>}
  */
 export async function ensureCombatantSideAssignments(combat, { overwrite = false, groupByDisposition = true } = {}) {
-    const combatants = Array.from(combat?.combatants ?? []);
+    const combatants = getCombatantEntries(combat);
     const updates = [];
 
     for (const combatant of combatants) {
@@ -491,6 +521,7 @@ export function getSideSummary(combat, { groupByDisposition = true } = {}) {
                 combatantIds,
                 count: combatantIds.length,
                 active: sideId === getActiveSideId(combat, { groupByDisposition }),
+                commanderId: state.commanderIds?.[sideId] ?? null,
                 tone: getSideTone(sideId)
             };
         });
@@ -505,6 +536,33 @@ export function getCombatantById(combat, id) {
 }
 
 /**
+ * Resolve the configured commander combatant id for a side.
+ * @param {object | null | undefined} combat
+ * @param {string} sideId
+ * @returns {string | null}
+ */
+export function getSideCommanderId(combat, sideId) {
+    const state = getCombatState(combat);
+    return state.commanderIds?.[normalizeSideId(sideId)] ?? null;
+}
+
+/**
+ * Resolve the configured commander combatant for a side.
+ * @param {object | null | undefined} combat
+ * @param {string} sideId
+ * @param {{ groupByDisposition?: boolean }} [options]
+ * @returns {CombatantLike | null}
+ */
+export function getSideCommanderCombatant(combat, sideId, { groupByDisposition = true } = {}) {
+    const normalizedId = normalizeSideId(sideId);
+    const commanderId = getSideCommanderId(combat, normalizedId);
+    if (!commanderId) return null;
+    const commander = getCombatantById(combat, commanderId);
+    if (!commander || commander.defeated) return null;
+    return getCombatantSideId(commander, { groupByDisposition }) === normalizedId ? commander : null;
+}
+
+/**
  * Determine whether a combat currently has side initiative state.
  * @param {object | null | undefined} combat
  * @returns {boolean}
@@ -512,7 +570,7 @@ export function getCombatantById(combat, id) {
 export function isSideCombat(combat) {
     if (!combat) return false;
     const state = getCombatState(combat);
-    if (state.activeSideId || state.activeCombatantId || state.order.length || Object.keys(state.sides).length) {
+    if (state.activeSideId || state.activeCombatantId || state.order.length || Object.keys(state.sides).length || Object.keys(state.commanderIds).length) {
         return true;
     }
     return Array.from(combat.combatants ?? []).some((combatant) => (
@@ -540,6 +598,8 @@ export function getSideColor(sideId) {
  */
 export function getSideRepresentativeCombatant(combat, sideId, { groupByDisposition = true } = {}) {
     const normalizedId = normalizeSideId(sideId);
+    const commander = getSideCommanderCombatant(combat, normalizedId, { groupByDisposition });
+    if (commander) return commander;
     const turnMembers = getCombatTurnEntries(combat).filter((combatant) => {
         if (!combatant || combatant.defeated) return false;
         return getCombatantSideId(combatant, { groupByDisposition }) === normalizedId;
@@ -598,6 +658,7 @@ export function getPreviousSideId(combat, options = {}) {
 export function cloneSideStateForSave(state, combatants) {
     const sideMap = collectCombatantSides(combatants);
     const nextState = normalizeCombatState(state);
+    const normalizedState = normalizeCombatState(state);
     nextState.sides = {};
 
     for (const [sideId, side] of sideMap.entries()) {
@@ -607,6 +668,21 @@ export function cloneSideStateForSave(state, combatants) {
             ...existing,
             combatantIds: side.combatantIds
         });
+    }
+
+    const combatantSideIds = new Map();
+    for (const [sideId, side] of sideMap.entries()) {
+        for (const combatantId of side.combatantIds) {
+            combatantSideIds.set(combatantId, sideId);
+        }
+    }
+
+    nextState.commanderIds = {};
+    for (const [sideId, combatantId] of Object.entries(normalizedState.commanderIds ?? {})) {
+        const normalizedSideId = normalizeSideId(sideId);
+        if (!combatantId) continue;
+        if (combatantSideIds.get(combatantId) !== normalizedSideId) continue;
+        nextState.commanderIds[normalizedSideId] = combatantId;
     }
 
     nextState.order = dedupeSideOrder([

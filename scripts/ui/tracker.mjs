@@ -1,5 +1,5 @@
 import { SETTINGS } from "../constants.mjs";
-import { getActiveSideId, getSideSummary, normalizeSideId } from "../logic.mjs";
+import { getActiveSideId, getCombatantSideId, getSideSummary, normalizeSideId } from "../logic.mjs";
 import { openSideEditor } from "./side-editor.mjs";
 
 /**
@@ -76,12 +76,55 @@ function bindCombatTrackerRowData(app, html) {
     const root = getRoot(html);
     if (!root) return;
     const rows = Array.from(root.querySelectorAll(".combatant"));
-    const combatants = Array.from(app?.combat?.combatants ?? []);
+    const combatants = Array.from(app?.viewed?.combatants ?? app?.combat?.combatants ?? []);
     for (const [index, row] of rows.entries()) {
         if (!row.dataset.combatantId && combatants[index]) {
             row.dataset.combatantId = combatants[index].id;
         }
     }
+}
+
+/**
+ * Resolve a combatant for a tracker row.
+ * @param {object} app
+ * @param {HTMLElement} row
+ * @returns {object | null}
+ */
+function getCombatantForRow(app, row) {
+    const combatantId = row?.dataset?.combatantId;
+    if (!combatantId) return null;
+    return app?.viewed?.combatants?.get?.(combatantId) ?? app?.combat?.combatants?.get?.(combatantId) ?? null;
+}
+
+/**
+ * Add commander controls to the combatant context menu.
+ * @param {object} app
+ * @param {Array<object>} menuItems
+ * @returns {void}
+ */
+export function addCombatantContextOptions(app, menuItems) {
+    if (!Array.isArray(menuItems)) return;
+    const combat = app?.viewed ?? game.combat ?? null;
+    if (!combat) return;
+
+    menuItems.splice(1, 0, {
+        name: "SIDE-INITIATIVE.UI.MakeCommander",
+        icon: '<i class="fa-solid fa-crown"></i>',
+        condition: (li) => {
+            const combatant = getCombatantForRow(app, li);
+            if (!combatant) return false;
+            if (!game.sideInitiative?.canUserSetCommander?.(combatant, game.user)) return false;
+            const sideId = getCombatantSideId(combatant);
+            if (!sideId) return false;
+            return game.sideInitiative?.getSideCommander?.(combat, sideId)?.id !== combatant.id;
+        },
+        callback: async (li) => {
+            const combatant = getCombatantForRow(app, li);
+            if (!combatant) return;
+            await game.sideInitiative?.setSideCommander?.(combat, combatant);
+            app.render?.();
+        }
+    });
 }
 
 /**

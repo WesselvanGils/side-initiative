@@ -6,17 +6,21 @@ import {
     ensureCombatantSideAssignments,
     getActiveSideId,
     getCombatantFromActor,
+    getSideCommanderCombatant,
+    getSideCommanderId,
     getNextSideId,
+    getSideRepresentativeCombatant,
     groupBy,
     isCombatantOnActiveSide,
     isActorOnActiveSide,
     isSideCombat,
     isTokenOnActiveSide,
     normalizeSideId,
+    normalizeCombatState,
     rollSideInitiativeData
 } from "../scripts/logic.mjs";
 
-function createCombatant({ id, hasPlayerOwner = false, disposition = 0, sideId = null, sideSource = null }) {
+function createCombatant({ id, hasPlayerOwner = false, disposition = 0, sideId = null, sideSource = null, ownerIds = [] }) {
     const flags = new Map();
     if (sideId) flags.set("side-initiative:sideId", sideId);
     if (sideSource) flags.set("side-initiative:sideSource", sideSource);
@@ -26,6 +30,10 @@ function createCombatant({ id, hasPlayerOwner = false, disposition = 0, sideId =
         name: id,
         hasPlayerOwner,
         disposition,
+        isOwner: ownerIds.includes("user-1"),
+        testUserPermission(user, permission) {
+            return (permission === "OWNER") && (user?.isGM || ownerIds.includes(user?.id));
+        },
         getFlag(scope, key) {
             return flags.get(`${scope}:${key}`) ?? null;
         },
@@ -65,6 +73,29 @@ function createCombat(combatants, state = null, turns = null) {
             if (typeof data.round === "number") this.round = data.round;
             if (typeof data.turn === "number") this.turn = data.turn;
             return Promise.resolve();
+        }
+    };
+}
+
+function installCommanderGlobals({
+    user = { id: "user-1", isGM: false },
+    commanderControl = "side-owners"
+} = {}) {
+    const original = globalThis.game;
+    globalThis.game = {
+        user,
+        settings: {
+            get(namespace, key) {
+                if (namespace === "side-initiative" && key === "commanderControl") {
+                    return commanderControl;
+                }
+                return null;
+            }
+        }
+    };
+    return {
+        restore() {
+            globalThis.game = original;
         }
     };
 }
@@ -144,6 +175,123 @@ test("isCombatantOnActiveSide and isTokenOnActiveSide resolve the current side",
     assert.equal(SideInitiativeAPI.isSideCombat(combat), true);
     assert.equal(SideInitiativeAPI.isCombatantOnActiveSide(playerCombatant, combat), true);
     assert.equal(SideInitiativeAPI.isTokenOnActiveSide(playerToken, combat), true);
+});
+
+test("normalizeCombatState preserves commander assignments", () => {
+    const state = normalizeCombatState({
+        version: 1,
+        commanderIds: {
+            Players: "pc-1"
+        }
+    });
+
+    assert.equal(state.version, 2);
+    assert.equal(state.commanderIds.players, "pc-1");
+});
+
+test("getSideRepresentativeCombatant prefers the configured commander", () => {
+    const playerOne = createCombatant({ id: "pc-1", hasPlayerOwner: true, disposition: 1, sideId: "players" });
+    const playerTwo = createCombatant({ id: "pc-2", hasPlayerOwner: true, disposition: 1, sideId: "players" });
+    const combat = createCombat(
+        [playerOne, playerTwo],
+        {
+            activeSideId: "players",
+            order: ["players"],
+            sides: {
+                players: { id: "players", combatantIds: ["pc-1", "pc-2"] }
+            },
+            commanderIds: {
+                players: "pc-2"
+            }
+        },
+        [playerOne, playerTwo]
+    );
+
+    assert.equal(getSideCommanderId(combat, "players"), "pc-2");
+    assert.equal(getSideCommanderCombatant(combat, "players"), playerTwo);
+    assert.equal(getSideRepresentativeCombatant(combat, "players"), playerTwo);
+});
+
+test("getSideRepresentativeCombatant falls back when the commander is defeated", () => {
+    const playerOne = createCombatant({ id: "pc-1", hasPlayerOwner: true, disposition: 1, sideId: "players" });
+    const playerTwo = createCombatant({ id: "pc-2", hasPlayerOwner: true, disposition: 1, sideId: "players" });
+    playerTwo.defeated = true;
+    const combat = createCombat(
+        [playerOne, playerTwo],
+        {
+            activeSideId: "players",
+            order: ["players"],
+            sides: {
+                players: { id: "players", combatantIds: ["pc-1", "pc-2"] }
+            },
+            commanderIds: {
+                players: "pc-2"
+            }
+        },
+        [playerOne, playerTwo]
+    );
+
+    assert.equal(getSideCommanderCombatant(combat, "players"), null);
+    assert.equal(getSideRepresentativeCombatant(combat, "players"), playerOne);
+});
+
+test("setSideCommander updates the commander and active turn for the active side", async () => {
+    const playerOne = createCombatant({ id: "pc-1", hasPlayerOwner: true, disposition: 1, sideId: "players" });
+    const playerTwo = createCombatant({ id: "pc-2", hasPlayerOwner: true, disposition: 1, sideId: "players" });
+    const combat = createCombat(
+        [playerOne, playerTwo],
+        {
+            activeSideId: "players",
+            order: ["players"],
+            sides: {
+                players: { id: "players", combatantIds: ["pc-1", "pc-2"] }
+            }
+        },
+        [playerOne, playerTwo]
+    );
+
+    const state = await SideInitiativeAPI.setSideCommander(combat, playerTwo);
+
+    assert.equal(state.commanderIds.players, "pc-2");
+    assert.equal(getSideCommanderId(combat, "players"), "pc-2");
+    assert.equal(combat.turn, 1);
+    assert.equal(combat.lastUpdate.turn, 1);
+});
+
+test("commander permissions respect side owners and GM override", () => {
+    const playerCombatant = createCombatant({ id: "pc-1", ownerIds: ["user-1"], hasPlayerOwner: true, sideId: "players" });
+    const otherCombatant = createCombatant({ id: "pc-2", ownerIds: ["user-2"], hasPlayerOwner: true, sideId: "players" });
+    const combat = createCombat(
+        [playerCombatant, otherCombatant],
+        {
+            activeSideId: "players",
+            order: ["players"],
+            sides: {
+                players: { id: "players", combatantIds: ["pc-1", "pc-2"] }
+            },
+            commanderIds: {
+                players: "pc-1"
+            }
+        },
+        [playerCombatant, otherCombatant]
+    );
+
+    const userEnv = installCommanderGlobals({ user: { id: "user-1", isGM: false }, commanderControl: "side-owners" });
+    try {
+        assert.equal(SideInitiativeAPI.canUserSetCommander(playerCombatant), true);
+        assert.equal(SideInitiativeAPI.canUserSetCommander(otherCombatant), false);
+        assert.equal(SideInitiativeAPI.canUserAdvanceSide(combat), true);
+    } finally {
+        userEnv.restore();
+    }
+
+    const gmEnv = installCommanderGlobals({ user: { id: "gm-1", isGM: true }, commanderControl: "gm-only" });
+    try {
+        assert.equal(SideInitiativeAPI.canUserSetCommander(otherCombatant), true);
+        assert.equal(SideInitiativeAPI.canUserAdvanceSide(combat), true);
+    } finally {
+        gmEnv.restore();
+    }
 });
 
 test("advanceSide uses the combat turn order when it differs from combatant order", async () => {

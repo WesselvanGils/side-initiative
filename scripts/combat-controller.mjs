@@ -33,6 +33,7 @@ export function installCombatPatches() {
 
     CombatClass.prototype.nextTurn = async function (...args) {
         if (isSideCombat(this)) {
+            if (!SideInitiativeAPI.canUserAdvanceSide(this)) return this;
             return SideInitiativeAPI.advanceSide(this, 1);
         }
         return originalNextTurn.apply(this, args);
@@ -40,6 +41,7 @@ export function installCombatPatches() {
 
     CombatClass.prototype.previousTurn = async function (...args) {
         if (isSideCombat(this)) {
+            if (!SideInitiativeAPI.canUserAdvanceSide(this)) return this;
             return SideInitiativeAPI.advanceSide(this, -1);
         }
         return originalPreviousTurn.apply(this, args);
@@ -47,6 +49,7 @@ export function installCombatPatches() {
 
     CombatClass.prototype.nextRound = async function (...args) {
         if (isSideCombat(this)) {
+            if (!SideInitiativeAPI.canUserAdvanceSide(this)) return this;
             const sideIds = getOrderedSideIds(this);
             if (!sideIds.length) return SideInitiativeAPI.advanceSide(this, 1);
             const firstSideId = sideIds[0];
