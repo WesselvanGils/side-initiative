@@ -5,8 +5,10 @@ import {
     defaultSideIdForCombatant,
     ensureCombatantSideAssignments,
     getActiveSideId,
+    getCombatantFromActor,
     getNextSideId,
     groupBy,
+    isActorOnActiveSide,
     normalizeSideId,
     rollSideInitiativeData
 } from "../scripts/logic.mjs";
@@ -91,6 +93,28 @@ test("ensureCombatantSideAssignments writes auto groups and preserves manual ove
     assert.equal(combatants[1].getFlag("side-initiative", "sideSource"), "auto");
     assert.equal(combatants[2].getFlag("side-initiative", "sideId"), "neutral");
     assert.equal(combatants[2].getFlag("side-initiative", "sideSource"), "manual");
+});
+
+test("isActorOnActiveSide resolves an actor combatant and checks the active side", () => {
+    const combatants = [
+        createCombatant({ id: "pc-1", hasPlayerOwner: true, disposition: 1 }),
+        createCombatant({ id: "npc-1", hasPlayerOwner: false, disposition: -1 })
+    ];
+    const combat = createCombat(combatants, {
+        activeSideId: "players",
+        order: ["players", "monsters"],
+        sides: {
+            players: { id: "players", combatantIds: ["pc-1"] },
+            monsters: { id: "monsters", combatantIds: ["npc-1"] }
+        }
+    });
+
+    const playerActor = { combatant: combatants[0] };
+    const monsterActor = { combatant: combatants[1] };
+
+    assert.equal(getCombatantFromActor(playerActor), combatants[0]);
+    assert.equal(isActorOnActiveSide(playerActor, combat), true);
+    assert.equal(isActorOnActiveSide(monsterActor, combat), false);
 });
 
 test("rollSideInitiativeData rerolls tied sides until unique", () => {

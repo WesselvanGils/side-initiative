@@ -119,6 +119,13 @@ export function getCombatantSideSource(combatant) {
     return stored ? String(stored) : null;
 }
 
+export function getCombatantFromActor(actor) {
+    if (!actor) return null;
+    const activeTokens = actor.getActiveTokens?.() ?? [];
+    const activeToken = Array.isArray(activeTokens) ? activeTokens.find((token) => token?.combatant) : null;
+    return actor.combatant ?? activeToken?.combatant ?? actor.token?.combatant ?? actor.prototypeToken?.combatant ?? null;
+}
+
 export function hasSideMembers(combat, sideId) {
     const normalizedId = normalizeSideId(sideId);
     return getCombatantsForSide(combat, normalizedId).length > 0;
@@ -399,6 +406,14 @@ export function isOffSideWorkflow(combat, combatant, { groupByDisposition = true
     if (!activeSideId) return false;
     const sideId = getCombatantSideId(combatant, { groupByDisposition });
     return normalizeSideId(activeSideId) !== normalizeSideId(sideId);
+}
+
+export function isActorOnActiveSide(actor, combat = null, { groupByDisposition = true } = {}) {
+    const resolvedCombat = combat ?? globalThis.game?.combat ?? null;
+    if (!resolvedCombat || !resolvedCombat.started || !actor) return false;
+    const combatant = getCombatantFromActor(actor);
+    if (!combatant) return false;
+    return !isOffSideWorkflow(resolvedCombat, combatant, { groupByDisposition });
 }
 
 export function resolveCombatantFromToken(token) {

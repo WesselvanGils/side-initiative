@@ -1,5 +1,5 @@
 import { SETTINGS } from "../constants.mjs";
-import { getActiveSideId, getSideSummary, isOffSideWorkflow, normalizeSideId } from "../logic.mjs";
+import { getActiveSideId, getSideSummary, normalizeSideId } from "../logic.mjs";
 import { openSideEditor } from "./side-editor.mjs";
 
 function getRoot(html) {
@@ -96,14 +96,4 @@ export function renderCombatTracker(app, html) {
         if (!side) continue;
         injectSideStrip(row, side);
     }
-}
-
-export function warnOffSideWorkflow(workflow) {
-    const combat = game.combat;
-    if (!combat || !combat.started) return false;
-    if (!game.settings.get("side-initiative", SETTINGS.warnOnOffSide)) return false;
-    if (workflow?.isReaction || workflow?.workflowOptions?.isReaction || workflow?.options?.isReaction) return false;
-    const combatant = workflow?.token?.combatant ?? workflow?.actor?.combatant;
-    if (!combatant) return false;
-    return isOffSideWorkflow(combat, combatant);
 }

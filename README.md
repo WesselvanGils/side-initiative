@@ -8,7 +8,7 @@ Foundry VTT module for the 2014 DMG side initiative variant.
 - Rerolls tied side totals until the tie breaks.
 - Keeps combatant side assignments on combatant flags.
 - Adds combat tracker controls for side rolling and editing.
-- Warns on MidiQOL workflows started by a combatant that is not on the active side.
+- Uses a MidiQOL reaction hook to keep same-side actors from being charged a reaction while their side is active.
 
 ## Usage
 
@@ -20,8 +20,8 @@ Foundry VTT module for the 2014 DMG side initiative variant.
 ## MidiQOL notes
 
 - The module does not block workflows.
-- MidiQOL's `Record AOO` reaction setting should be set to `Do not check` when using side initiative, otherwise reaction consumption can be double-counted.
-- The off-side warning is intended to be informative so MidiQOL automation can continue to work.
+- MidiQOL's `Record AOO` reaction setting should be set to `Do not check` when using side initiative, otherwise reaction consumption can still be double-counted by MidiQOL.
+- This module uses `midi-qol.preSetReactionUsed` to suppress reaction consumption for actors on the active side.
 
 ## Gambits Premades notes
 

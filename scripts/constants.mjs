@@ -14,7 +14,6 @@ export const DEFAULT_SIDE_DATA = {
 };
 
 export const SETTINGS = {
-    warnOnOffSide: "warnOnOffSide",
     groupByDisposition: "groupByDisposition",
     showTrackerControls: "showTrackerControls"
 };
