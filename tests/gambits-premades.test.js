@@ -10,8 +10,27 @@ import {
 } from "../scripts/integration/gambits-premades.mjs";
 
 function createOriginalOpportunityAttackScenarios() {
-    return async function opportunityAttackScenarios({ tokenUuid }) {
+    return async function opportunityAttackScenarios({ tokenUuid, regionUuid, regionScenario }) {
         const token = await fromUuid(tokenUuid);
+        const region = await fromUuid(regionUuid);
+        if (!token || !region || !regionScenario) return null;
+
+        if (regionScenario === "onTurnStart") {
+            let behaviors = region.behaviors.filter(b => b.name === "onExit" || b.name === "onEnter");
+            for (let behavior of behaviors) {
+                await behavior.update({"disabled": true});
+            }
+            return "disabled";
+        }
+
+        if (regionScenario === "onTurnEnd") {
+            let behaviors = region.behaviors.filter(b => b.name === "onExit" || b.name === "onEnter");
+            for (let behavior of behaviors) {
+                await behavior.update({"disabled": false});
+            }
+            return "enabled";
+        }
+
         let currentCombatant = canvas.tokens.get(game.combat?.current.tokenId);
         if (currentCombatant?.id !== token.object.id) {
             if (game.settings.get("gambits-premades", "debugEnabled")) {
@@ -43,6 +62,42 @@ function installGlobals({
         ["current-token", { id: "current-token", object: { id: "current-token" }, actor: { type: "npc" } }],
         ["active-token", { id: "active-token", object: { id: "active-token" }, actor: { type: "npc" } }],
         ["offside-token", { id: "offside-token", object: { id: "offside-token" }, actor: { type: "npc" } }]
+    ]);
+    const regionUpdates = [];
+    const regions = new Map([
+        [
+            "region-1",
+            {
+                id: "region-1",
+                uuid: "region-1",
+                flags: {
+                    "gambits-premades": {
+                        actorUuid: "active-token",
+                        tokenUuid: "active-token"
+                    }
+                },
+                behaviors: [
+                    {
+                        name: "onExit",
+                        update(data) {
+                            regionUpdates.push({ behavior: "onExit", ...data });
+                            return Promise.resolve(data);
+                        }
+                    },
+                    {
+                        name: "onEnter",
+                        update(data) {
+                            regionUpdates.push({ behavior: "onEnter", ...data });
+                            return Promise.resolve(data);
+                        }
+                    }
+                ],
+                getFlag(scope, key) {
+                    if (scope === "gambits-premades" && key === "regionDisabled") return false;
+                    return null;
+                }
+            }
+        ]
     ]);
 
     globalThis.game = {
@@ -93,7 +148,7 @@ function installGlobals({
             }
         }
     };
-    globalThis.fromUuid = async (uuid) => tokens.get(uuid) ?? null;
+    globalThis.fromUuid = async (uuid) => tokens.get(uuid) ?? regions.get(uuid) ?? null;
     globalThis.Hooks = {
         once() {},
         on() {}
@@ -102,6 +157,8 @@ function installGlobals({
     return {
         warnings,
         tokens,
+        regions,
+        regionUpdates,
         restore() {
             globalThis.game = original.game;
             globalThis.ui = original.ui;
@@ -133,8 +190,16 @@ test("Gambits integration patches the active-side bypass and preserves the origi
         assert.equal(getGambitsPremadesIntegrationState().status, "patched");
         assert.notEqual(game.gps.opportunityAttackScenarios, original);
 
-        const activeSideResult = await game.gps.opportunityAttackScenarios({ tokenUuid: "active-token" });
-        const offSideResult = await game.gps.opportunityAttackScenarios({ tokenUuid: "offside-token" });
+        const activeSideResult = await game.gps.opportunityAttackScenarios({
+            tokenUuid: "active-token",
+            regionUuid: "region-1",
+            regionScenario: "onExit"
+        });
+        const offSideResult = await game.gps.opportunityAttackScenarios({
+            tokenUuid: "offside-token",
+            regionUuid: "region-1",
+            regionScenario: "onExit"
+        });
 
         assert.equal(activeSideResult, "allowed");
         assert.equal(offSideResult, "blocked");
@@ -144,6 +209,27 @@ test("Gambits integration patches the active-side bypass and preserves the origi
         const patched = game.gps.opportunityAttackScenarios;
         registerGambitsPremadesIntegration();
         assert.equal(game.gps.opportunityAttackScenarios, patched);
+    } finally {
+        env.restore();
+    }
+});
+
+test("Gambits integration keeps the commander's OA region enabled on turn start", async () => {
+    const env = installGlobals({ currentTokenId: "active-token" });
+    try {
+        registerGambitsPremadesIntegration();
+
+        const result = await game.gps.opportunityAttackScenarios({
+            tokenUuid: "active-token",
+            regionUuid: "region-1",
+            regionScenario: "onTurnStart"
+        });
+
+        assert.equal(result, undefined);
+        assert.deepEqual(env.regionUpdates, [
+            { behavior: "onExit", disabled: false },
+            { behavior: "onEnter", disabled: false }
+        ]);
     } finally {
         env.restore();
     }

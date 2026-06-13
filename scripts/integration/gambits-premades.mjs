@@ -2,7 +2,9 @@ const SUPPORTED_GAMBITS_PREMADES_VERSION = "2.1.43";
 const SUPPORTED_OPPORTUNITY_ATTACK_SOURCE_MARKERS = [
     "canvas.tokens.get(game.combat?.current.tokenId)",
     "currentCombatant?.id !== token.object.id",
-    "not tokens turn in combat"
+    "not tokens turn in combat",
+    "regionScenario === \"onTurnStart\"",
+    "let behaviors = region.behaviors.filter(b => b.name === \"onExit\" || b.name === \"onEnter\")"
 ];
 
 const integrationState = {
@@ -94,14 +96,40 @@ function disableIntegration(status, reason, warningKey = null, warningMessage = 
     }
 }
 
+function getOpportunityAttackRegionBehaviors(region) {
+    const behaviors = region?.behaviors;
+    if (!behaviors) return [];
+    if (Array.isArray(behaviors)) return behaviors;
+    if (typeof behaviors.filter === "function") return behaviors.filter(() => true);
+    if (typeof behaviors.values === "function") return Array.from(behaviors.values());
+    if (typeof behaviors[Symbol.iterator] === "function") return Array.from(behaviors);
+    return [];
+}
+
+async function setOpportunityAttackRegionBehaviorsDisabled(region, disabled) {
+    const behaviors = getOpportunityAttackRegionBehaviors(region).filter((behavior) => behavior?.name === "onExit" || behavior?.name === "onEnter");
+    for (const behavior of behaviors) {
+        await behavior.update?.({ disabled });
+    }
+}
+
 function createPatchedOpportunityAttackScenarios(original) {
     return async function patchedOpportunityAttackScenarios(payload) {
         const tokenUuid = payload?.tokenUuid;
+        const regionScenario = payload?.regionScenario ?? null;
+        const regionUuid = payload?.regionUuid ?? null;
         const combat = game.combat ?? null;
+        const region = regionUuid ? await fromUuid(regionUuid) : null;
         const token = tokenUuid ? await fromUuid(tokenUuid) : null;
 
         if (!combat || !token?.object?.id) {
             return original.call(this, payload);
+        }
+
+        if (regionScenario === "onTurnStart" && game.sideInitiative?.isTokenOnActiveSide?.(token, combat)) {
+            if (!region) return;
+            await setOpportunityAttackRegionBehaviorsDisabled(region, false);
+            return;
         }
 
         const currentTokenId = combat.current?.tokenId;
