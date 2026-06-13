@@ -61,6 +61,25 @@
     pointer-events: none;
 }
 
+.side-initiative-commander-control {
+    flex: 0 0 auto;
+    width: 1.35rem;
+    height: 1.35rem;
+    min-width: 1.35rem;
+    min-height: 1.35rem;
+    margin: 0 0.1rem 0 0;
+    padding: 0;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 3px;
+}
+
+.side-initiative-commander-control.active {
+    background: rgba(255, 215, 0, 0.16);
+    color: inherit;
+}
+
 .side-initiative-editor {
     display: grid;
     gap: 0.6rem;

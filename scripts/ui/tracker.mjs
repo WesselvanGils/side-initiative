@@ -11,6 +11,14 @@ function getRoot(html) {
 }
 
 /**
+ * @param {object | null | undefined} app
+ * @returns {object | null}
+ */
+function getTrackerCombat(app) {
+    return app?.viewed ?? game.combat ?? null;
+}
+
+/**
  * @param {string} label
  * @param {string} icon
  * @param {Record<string, string | number | boolean>} [dataset]
@@ -97,6 +105,69 @@ function getCombatantForRow(app, row) {
 }
 
 /**
+ * Create the commander button for a tracker row.
+ * @param {object} app
+ * @param {object} combat
+ * @param {object} combatant
+ * @returns {HTMLButtonElement | null}
+ */
+function createCommanderControl(app, combat, combatant) {
+    if (!globalThis.document?.createElement) return null;
+
+    const button = document.createElement("button");
+    const label = game.i18n.localize("SIDE-INITIATIVE.UI.MakeCommander");
+    const sideId = getCombatantSideId(combatant);
+    const isCommander = Boolean(sideId && game.sideInitiative?.getSideCommander?.(combat, sideId)?.id === combatant.id);
+
+    button.type = "button";
+    button.className = "control inline-control combatant-control icon fa-solid fa-crown side-initiative-commander-control";
+    button.title = label;
+    button.setAttribute("aria-label", label);
+    button.setAttribute("data-tooltip", label);
+    button.setAttribute("aria-pressed", String(isCommander));
+    if (isCommander) {
+        button.classList.add("active");
+    }
+
+    button.addEventListener("click", async (event) => {
+        event.preventDefault();
+        event.stopPropagation?.();
+        if (isCommander) return;
+        await game.sideInitiative?.setSideCommander?.(combat, combatant);
+        app.render?.();
+    });
+
+    return button;
+}
+
+/**
+ * Add commander controls to a combat tracker row.
+ * @param {object} app
+ * @param {HTMLElement} row
+ * @param {object} combat
+ * @returns {HTMLButtonElement | null}
+ */
+export function addCommanderControl(app, row, combat) {
+    row?.querySelector?.(".side-initiative-commander-control")?.remove?.();
+
+    const combatant = getCombatantForRow(app, row);
+    if (!combatant) return null;
+    if (!game.sideInitiative?.canUserSetCommander?.(combatant, game.user)) return null;
+
+    const button = createCommanderControl(app, combat, combatant);
+    if (!button) return null;
+
+    const anchor = row.querySelector?.(".token-effects");
+    if (anchor?.before) {
+        anchor.before(button);
+    } else if (row.append) {
+        row.append(button);
+    }
+
+    return button;
+}
+
+/**
  * Add commander controls to the combatant context menu.
  * @param {object} app
  * @param {Array<object>} menuItems
@@ -137,7 +208,7 @@ export function renderCombatTracker(app, html) {
     if (!game.user?.isGM && !game.user?.can?.("COMBAT_TRACKER")) return;
     if (!game.settings.get("side-initiative", SETTINGS.showTrackerControls)) return;
 
-    const combat = game.combat;
+    const combat = getTrackerCombat(app);
     const root = getRoot(html);
     if (!combat || !root) return;
 
@@ -174,5 +245,6 @@ export function renderCombatTracker(app, html) {
         const side = resolveCombatantSide(combat, combatantId);
         if (!side) continue;
         injectSideStrip(row, side);
+        addCommanderControl(app, row, combat);
     }
 }
