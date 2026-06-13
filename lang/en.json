@@ -16,5 +16,6 @@
     "SIDE-INITIATIVE.UI.NotActed": "Not acted",
     "SIDE-INITIATIVE.UI.CurrentTurn": "Current turn",
     "SIDE-INITIATIVE.Notifications.SideRolled": "Side initiative rolled.",
-    "SIDE-INITIATIVE.Notifications.EditorSaved": "Side assignments saved."
+    "SIDE-INITIATIVE.Notifications.EditorSaved": "Side assignments saved.",
+    "SIDE-INITIATIVE.Notifications.GambitsOpportunityAttackIncompatible": "Gambits Premades Opportunity Attack is enabled, but it is not side-aware. Disable it when using Side Initiative."
 }

@@ -26,7 +26,8 @@ Foundry VTT module for the 2014 DMG side initiative variant.
 ## Gambits Premades notes
 
 - Gambits Premades Opportunity Attack automation currently keys off the active combat token. It is not side-aware and will not reliably follow grouped side initiative.
-- If you use side initiative, disable Gambits Premades Opportunity Attack automation and let your own reaction handling drive it.
+- This module detects that setup and warns the GM once per combat when Gambits Opportunity Attack is enabled.
+- If you use side initiative, keep Gambits Premades Opportunity Attack disabled unless Gambits changes its active-token guard to accept side-aware tokens.
 
 ## Development
 

@@ -63,6 +63,13 @@ import {
  */
 
 /**
+ * @typedef {object} TokenLike
+ * @property {CombatantLike | null} [combatant]
+ * @property {ActorLike | null} [actor]
+ * @property {ActorLike | null} [document]
+ */
+
+/**
  * Normalize a side identifier into a lowercase slug.
  * @param {unknown} value
  * @returns {string}
@@ -497,6 +504,23 @@ export function getCombatantById(combat, id) {
     return Array.from(combat.combatants ?? []).find((entry) => entry.id === id) ?? null;
 }
 
+/**
+ * Determine whether a combat currently has side initiative state.
+ * @param {object | null | undefined} combat
+ * @returns {boolean}
+ */
+export function isSideCombat(combat) {
+    if (!combat) return false;
+    const state = getCombatState(combat);
+    if (state.activeSideId || state.activeCombatantId || state.order.length || Object.keys(state.sides).length) {
+        return true;
+    }
+    return Array.from(combat.combatants ?? []).some((combatant) => (
+        combatant?.getFlag?.(FLAG_SCOPE, COMBATANT_SIDE_FLAG) != null ||
+        combatant?.getFlag?.(FLAG_SCOPE, COMBATANT_SIDE_SOURCE_FLAG) != null
+    ));
+}
+
 export function getSideLabel(sideId) {
     const normalizedId = normalizeSideId(sideId);
     return DEFAULT_SIDE_DATA[normalizedId]?.name ?? normalizedId;
@@ -625,6 +649,19 @@ export function isOffSideWorkflow(combat, combatant, { groupByDisposition = true
 }
 
 /**
+ * Determine whether a combatant is on the active side.
+ * @param {object | null | undefined} combat
+ * @param {CombatantLike | null | undefined} combatant
+ * @param {{ groupByDisposition?: boolean }} [options]
+ * @returns {boolean}
+ */
+export function isCombatantOnActiveSide(combat, combatant, { groupByDisposition = true } = {}) {
+    const resolvedCombat = combat ?? globalThis.game?.combat ?? null;
+    if (!resolvedCombat || !resolvedCombat.started || !combatant) return false;
+    return !isOffSideWorkflow(resolvedCombat, combatant, { groupByDisposition });
+}
+
+/**
  * Determine whether an actor is on the active side.
  * @param {ActorLike | null | undefined} actor
  * @param {object | null | undefined} combat
@@ -636,7 +673,23 @@ export function isActorOnActiveSide(actor, combat = null, { groupByDisposition =
     if (!resolvedCombat || !resolvedCombat.started || !actor) return false;
     const combatant = getCombatantFromActor(actor);
     if (!combatant) return false;
-    return !isOffSideWorkflow(resolvedCombat, combatant, { groupByDisposition });
+    return isCombatantOnActiveSide(resolvedCombat, combatant, { groupByDisposition });
+}
+
+/**
+ * Determine whether a token is on the active side.
+ * @param {TokenLike | null | undefined} token
+ * @param {object | null | undefined} combat
+ * @param {{ groupByDisposition?: boolean }} [options]
+ * @returns {boolean}
+ */
+export function isTokenOnActiveSide(token, combat = null, { groupByDisposition = true } = {}) {
+    const resolvedCombat = combat ?? globalThis.game?.combat ?? null;
+    if (!resolvedCombat || !resolvedCombat.started || !token) return false;
+    const combatant = resolveCombatantFromToken(token) ?? token?.document?.combatant ?? token?.actor?.combatant ?? null;
+    if (combatant) return isCombatantOnActiveSide(resolvedCombat, combatant, { groupByDisposition });
+    if (token?.actor) return isActorOnActiveSide(token.actor, resolvedCombat, { groupByDisposition });
+    return false;
 }
 
 /**

@@ -8,7 +8,10 @@ import {
     getCombatantFromActor,
     getNextSideId,
     groupBy,
+    isCombatantOnActiveSide,
     isActorOnActiveSide,
+    isSideCombat,
+    isTokenOnActiveSide,
     normalizeSideId,
     rollSideInitiativeData
 } from "../scripts/logic.mjs";
@@ -116,6 +119,31 @@ test("isActorOnActiveSide resolves an actor combatant and checks the active side
     assert.equal(getCombatantFromActor(playerActor), combatants[0]);
     assert.equal(isActorOnActiveSide(playerActor, combat), true);
     assert.equal(isActorOnActiveSide(monsterActor, combat), false);
+});
+
+test("isCombatantOnActiveSide and isTokenOnActiveSide resolve the current side", () => {
+    const playerCombatant = createCombatant({ id: "pc-1", hasPlayerOwner: true, disposition: 1 });
+    const monsterCombatant = createCombatant({ id: "npc-1", hasPlayerOwner: false, disposition: -1 });
+    const combat = createCombat([playerCombatant, monsterCombatant], {
+        activeSideId: "players",
+        order: ["players", "monsters"],
+        sides: {
+            players: { id: "players", combatantIds: ["pc-1"] },
+            monsters: { id: "monsters", combatantIds: ["npc-1"] }
+        }
+    });
+
+    const playerToken = { combatant: playerCombatant, actor: { combatant: playerCombatant } };
+    const monsterToken = { combatant: monsterCombatant, actor: { combatant: monsterCombatant } };
+
+    assert.equal(isSideCombat(combat), true);
+    assert.equal(isCombatantOnActiveSide(combat, playerCombatant), true);
+    assert.equal(isCombatantOnActiveSide(combat, monsterCombatant), false);
+    assert.equal(isTokenOnActiveSide(playerToken, combat), true);
+    assert.equal(isTokenOnActiveSide(monsterToken, combat), false);
+    assert.equal(SideInitiativeAPI.isSideCombat(combat), true);
+    assert.equal(SideInitiativeAPI.isCombatantOnActiveSide(playerCombatant, combat), true);
+    assert.equal(SideInitiativeAPI.isTokenOnActiveSide(playerToken, combat), true);
 });
 
 test("advanceSide uses the combat turn order when it differs from combatant order", async () => {

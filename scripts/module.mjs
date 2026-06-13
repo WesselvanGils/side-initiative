@@ -1,6 +1,7 @@
 import { MODULE_ID, SETTINGS } from "./constants.mjs";
 import { SideInitiativeAPI } from "./api.mjs";
 import { installCombatPatches } from "./combat-controller.mjs";
+import { registerGambitsPremadesIntegration } from "./integration/gambits-premades.mjs";
 import { registerMidiQolIntegration } from "./integration/midi-qol.mjs";
 import { renderCombatTracker } from "./ui/tracker.mjs";
 
@@ -55,6 +56,7 @@ Hooks.once("ready", () => {
     if (game.combat) {
         game.sideInitiative?.refreshCombatantSides?.(game.combat);
     }
+    registerGambitsPremadesIntegration();
     if (game.modules.get("midi-qol")?.active) {
         registerMidiQolIntegration();
     }

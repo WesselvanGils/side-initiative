@@ -8,6 +8,10 @@ import {
     getOrderedSideIds,
     getSideRepresentativeCombatant,
     getSideSummary,
+    isActorOnActiveSide,
+    isCombatantOnActiveSide,
+    isSideCombat,
+    isTokenOnActiveSide,
     normalizeSideId,
     rollSideInitiativeData,
     setCombatState,
@@ -99,7 +103,11 @@ function getNextRoundDelta(currentSideId, nextSideId, direction = 1, sideIds = [
  *   setActiveSide(combat?: object | null, sideId: string): Promise<object | null>,
  *   advanceSide(combat?: object | null, direction?: number): Promise<object | null>,
  *   getSideState(combat?: object | null): Array<object> | null,
- *   canCombatantAct(combatant: object | null | undefined, combat?: object | null): boolean
+ *   canCombatantAct(combatant: object | null | undefined, combat?: object | null): boolean,
+ *   isSideCombat(combat?: object | null): boolean,
+ *   isCombatantOnActiveSide(combatant: object | null | undefined, combat?: object | null): boolean,
+ *   isActorOnActiveSide(actor: object | null | undefined, combat?: object | null): boolean,
+ *   isTokenOnActiveSide(token: object | null | undefined, combat?: object | null): boolean
  * }}
  */
 export const SideInitiativeAPI = {
@@ -213,5 +221,25 @@ export const SideInitiativeAPI = {
         const resolvedCombat = getCombatFromArgument(combat);
         if (!resolvedCombat || !combatant) return false;
         return !combatant.defeated;
+    },
+
+    isSideCombat(combat = null) {
+        const resolvedCombat = getCombatFromArgument(combat);
+        return isSideCombat(resolvedCombat);
+    },
+
+    isCombatantOnActiveSide(combatant, combat = null, options = {}) {
+        const resolvedCombat = getCombatFromArgument(combat);
+        return isCombatantOnActiveSide(resolvedCombat, combatant, options);
+    },
+
+    isActorOnActiveSide(actor, combat = null, options = {}) {
+        const resolvedCombat = getCombatFromArgument(combat);
+        return isActorOnActiveSide(actor, resolvedCombat, options);
+    },
+
+    isTokenOnActiveSide(token, combat = null, options = {}) {
+        const resolvedCombat = getCombatFromArgument(combat);
+        return isTokenOnActiveSide(token, resolvedCombat, options);
     }
 };
