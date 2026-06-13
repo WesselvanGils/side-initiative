@@ -1,4 +1,4 @@
-import { COMMANDER_CONTROL_OPTIONS, MODULE_ID, SETTINGS, SOCKET_EVENT } from "./constants.mjs";
+import { COMMANDER_CONTROL_OPTIONS, INITIATIVE_METHOD_OPTIONS, MODULE_ID, SETTINGS, SOCKET_EVENT } from "./constants.mjs";
 import { SideInitiativeAPI } from "./api.mjs";
 import { installCombatPatches } from "./combat-controller.mjs";
 import { handleCommanderSocketRequest } from "./api.mjs";
@@ -41,6 +41,39 @@ function registerSettings() {
         },
         default: COMMANDER_CONTROL_OPTIONS.sideOwners
     });
+
+    game.settings.register(MODULE_ID, SETTINGS.initiativeMethod, {
+        name: "SIDE-INITIATIVE.Settings.InitiativeMethod.Name",
+        hint: "SIDE-INITIATIVE.Settings.InitiativeMethod.Hint",
+        scope: "world",
+        config: true,
+        type: String,
+        choices: {
+            [INITIATIVE_METHOD_OPTIONS.sideD20]: "SIDE-INITIATIVE.Settings.InitiativeMethod.SideD20",
+            [INITIATIVE_METHOD_OPTIONS.weightedAverage]: "SIDE-INITIATIVE.Settings.InitiativeMethod.WeightedAverage"
+        },
+        default: INITIATIVE_METHOD_OPTIONS.sideD20
+    });
+}
+
+/**
+ * Handle combat updates that start a new encounter.
+ * @param {object} combat
+ * @param {object} changed
+ * @returns {Promise<void>}
+ */
+export async function handleCombatStartedUpdate(combat, changed) {
+    if (!changed?.started) return;
+
+    await game.sideInitiative?.refreshCombatantSides?.(combat);
+
+    const initiativeMethod = game.settings?.get?.(MODULE_ID, SETTINGS.initiativeMethod);
+    if (initiativeMethod !== INITIATIVE_METHOD_OPTIONS.weightedAverage) return;
+
+    const state = game.sideInitiative?.getSideState?.(combat);
+    if (state?.lastRolledRound === combat?.round) return;
+
+    await game.sideInitiative?.rollWeightedSideInitiative?.(combat, { refresh: false });
 }
 
 /**
@@ -80,11 +113,7 @@ function registerHooks() {
     Hooks.on("createCombat", async (combat) => {
         await game.sideInitiative?.refreshCombatantSides?.(combat);
     });
-    Hooks.on("updateCombat", async (combat, changed) => {
-        if (changed?.started) {
-            await game.sideInitiative?.refreshCombatantSides?.(combat);
-        }
-    });
+    Hooks.on("updateCombat", handleCombatStartedUpdate);
 }
 
 Hooks.once("init", () => {

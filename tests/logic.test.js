@@ -6,6 +6,7 @@ import {
     ensureCombatantSideAssignments,
     getActiveSideId,
     getCombatantFromActor,
+    getCombatantInitiativeWeight,
     getSideCommanderCombatant,
     getSideCommanderId,
     getNextSideId,
@@ -17,22 +18,50 @@ import {
     isTokenOnActiveSide,
     normalizeSideId,
     normalizeCombatState,
-    rollSideInitiativeData
+    rollSideInitiativeData,
+    rollWeightedSideInitiativeData
 } from "../scripts/logic.mjs";
 
-function createCombatant({ id, hasPlayerOwner = false, disposition = 0, sideId = null, sideSource = null, ownerIds = [] }) {
+function createCombatant({
+    id,
+    hasPlayerOwner = false,
+    disposition = 0,
+    sideId = null,
+    sideSource = null,
+    ownerIds = [],
+    actorXp = null,
+    initiativeTotal = 10
+}) {
     const flags = new Map();
     if (sideId) flags.set("side-initiative:sideId", sideId);
     if (sideSource) flags.set("side-initiative:sideSource", sideSource);
+    const xp = actorXp === null ? null : (typeof actorXp === "object" ? actorXp : { value: actorXp });
+    const actor = {
+        hasPlayerOwner,
+        system: xp ? { details: { xp } } : { details: {} },
+        getRollData() {
+            return {};
+        }
+    };
 
     return {
         id,
         name: id,
         hasPlayerOwner,
         disposition,
+        actor,
+        token: { actor },
         isOwner: ownerIds.includes("user-1"),
         testUserPermission(user, permission) {
             return (permission === "OWNER") && (user?.isGM || ownerIds.includes(user?.id));
+        },
+        getInitiativeRoll() {
+            return {
+                total: initiativeTotal,
+                evaluate: async function evaluate() {
+                    return this;
+                }
+            };
         },
         getFlag(scope, key) {
             return flags.get(`${scope}:${key}`) ?? null;
@@ -66,6 +95,10 @@ function createCombat(combatants, state = null, turns = null) {
         },
         updateEmbeddedDocuments(_type, docs) {
             this.lastEmbedded = docs;
+             for (const doc of docs) {
+                const combatant = this.combatants instanceof Map ? this.combatants.get(doc._id) : this.combatants.find((entry) => entry.id === doc._id);
+                if (combatant) combatant.initiative = doc.initiative;
+            }
             return Promise.resolve();
         },
         update(data) {
@@ -128,6 +161,18 @@ test("ensureCombatantSideAssignments writes auto groups and preserves manual ove
     assert.equal(combatants[1].getFlag("side-initiative", "sideSource"), "auto");
     assert.equal(combatants[2].getFlag("side-initiative", "sideId"), "neutral");
     assert.equal(combatants[2].getFlag("side-initiative", "sideSource"), "manual");
+});
+
+test("getCombatantInitiativeWeight uses xp for NPCs and defaults to one", () => {
+    const player = createCombatant({ id: "pc-1", hasPlayerOwner: true, actorXp: 500 });
+    const lich = createCombatant({ id: "npc-1", hasPlayerOwner: false, actorXp: 3900 });
+    const goblin = createCombatant({ id: "npc-2", hasPlayerOwner: false, actorXp: { value: 50 } });
+    const unknown = createCombatant({ id: "npc-3", hasPlayerOwner: false, actorXp: 0 });
+
+    assert.equal(getCombatantInitiativeWeight(player), 1);
+    assert.equal(getCombatantInitiativeWeight(lich), 3900);
+    assert.equal(getCombatantInitiativeWeight(goblin), 50);
+    assert.equal(getCombatantInitiativeWeight(unknown), 1);
 });
 
 test("isActorOnActiveSide resolves an actor combatant and checks the active side", () => {
@@ -342,6 +387,33 @@ test("rollSideInitiativeData rerolls tied sides until unique", () => {
     assert.equal(new Set(result.rolls.map((entry) => entry.roll)).size, 3);
 });
 
+test("rollWeightedSideInitiativeData computes weighted averages by side", () => {
+    const result = rollWeightedSideInitiativeData(
+        [
+            { id: "players", combatantIds: ["pc-1", "pc-2"] },
+            { id: "monsters", combatantIds: ["lich", "goblin"] }
+        ],
+        {
+            "pc-1": 10,
+            "pc-2": 12,
+            lich: 8,
+            goblin: 18
+        },
+        {
+            "pc-1": 1,
+            "pc-2": 1,
+            lich: 3900,
+            goblin: 50
+        },
+        () => 0.5
+    );
+
+    assert.equal(result.rolls.find((entry) => entry.id === "players").roll, 11);
+    assert.equal(result.rolls.find((entry) => entry.id === "monsters").roll, 8.13);
+    assert.equal(result.order[0], "players");
+    assert.equal(result.order[1], "monsters");
+});
+
 test("SideInitiativeAPI rolls and advances by side", async () => {
     const combatants = [
         createCombatant({ id: "pc-1", hasPlayerOwner: true, disposition: 1 }),
@@ -370,6 +442,36 @@ test("SideInitiativeAPI rolls and advances by side", async () => {
     await SideInitiativeAPI.advanceSide(combat, 1);
     assert.equal(getActiveSideId(combat), state.order[0]);
     assert.equal(combat.round, 2);
+});
+
+test("SideInitiativeAPI.rollWeightedSideInitiative applies weighted averages to all combatants", async () => {
+    const combatants = [
+        createCombatant({ id: "pc-1", hasPlayerOwner: true, disposition: 1, sideId: "players", initiativeTotal: 10 }),
+        createCombatant({ id: "pc-2", hasPlayerOwner: true, disposition: 1, sideId: "players", initiativeTotal: 12 }),
+        createCombatant({ id: "lich", hasPlayerOwner: false, disposition: -1, sideId: "monsters", actorXp: 3900, initiativeTotal: 8 }),
+        createCombatant({ id: "goblin", hasPlayerOwner: false, disposition: -1, sideId: "monsters", actorXp: 50, initiativeTotal: 18 })
+    ];
+    const combat = createCombat(
+        combatants,
+        {
+            order: ["players", "monsters"],
+            sides: {
+                players: { id: "players", combatantIds: ["pc-1", "pc-2"] },
+                monsters: { id: "monsters", combatantIds: ["lich", "goblin"] }
+            }
+        },
+        combatants
+    );
+
+    const state = await SideInitiativeAPI.rollWeightedSideInitiative(combat, { refresh: false, random: () => 0.25 });
+
+    assert.equal(state.order[0], "players");
+    assert.equal(combatants[0].initiative, 11);
+    assert.equal(combatants[1].initiative, 11);
+    assert.equal(combatants[2].initiative, 8.13);
+    assert.equal(combatants[3].initiative, 8.13);
+    assert.equal(getActiveSideId(combat), "players");
+    assert.equal(combat.turn, 0);
 });
 
 test("getNextSideId skips empty sides", () => {

@@ -385,6 +385,42 @@ export function rollDie(random = Math.random) {
 }
 
 /**
+ * Resolve the XP value used to weight a combatant's initiative.
+ * @param {CombatantLike | null | undefined} combatant
+ * @returns {number}
+ */
+function getCombatantXpValue(combatant) {
+    const candidates = [
+        combatant?.actor?.system?.details?.xp?.value,
+        combatant?.actor?.system?.details?.xp,
+        combatant?.token?.actor?.system?.details?.xp?.value,
+        combatant?.token?.actor?.system?.details?.xp
+    ];
+
+    for (const candidate of candidates) {
+        if (candidate && typeof candidate === "object") {
+            const nested = Number(candidate.value ?? candidate.xp ?? candidate.total);
+            if (Number.isFinite(nested) && nested > 0) return nested;
+        }
+
+        const value = Number(candidate);
+        if (Number.isFinite(value) && value > 0) return value;
+    }
+
+    return 1;
+}
+
+/**
+ * Determine the initiative weight for a combatant.
+ * @param {CombatantLike | null | undefined} combatant
+ * @returns {number}
+ */
+export function getCombatantInitiativeWeight(combatant) {
+    if (isPlayerOwnedCombatant(combatant)) return 1;
+    return getCombatantXpValue(combatant);
+}
+
+/**
  * Roll initiative for each side and resolve ties.
  * @param {Array<Partial<SideData> & { id: string }>} sideEntries
  * @param {() => number} [random]
@@ -423,6 +459,51 @@ export function rollSideInitiativeData(sideEntries, random = Math.random, { maxA
         rolls,
         order: ordered.map((side) => side.id),
         fallbackUsed
+    };
+}
+
+/**
+ * Roll initiative for each side using weighted combatant averages.
+ * @param {Array<Partial<SideData> & { id: string, combatantIds?: string[] }>} sideEntries
+ * @param {Record<string, number>} initiativeByCombatantId
+ * @param {Record<string, number>} [weightByCombatantId]
+ * @param {() => number} [random]
+ * @returns {{ rolls: Array<SideData & { roll: number, tieBreaker: number }>, order: string[], fallbackUsed: boolean }}
+ */
+export function rollWeightedSideInitiativeData(sideEntries, initiativeByCombatantId = {}, weightByCombatantId = {}, random = Math.random) {
+    const rolls = sideEntries.map((side) => {
+        const combatantIds = Array.isArray(side.combatantIds) ? side.combatantIds : [];
+        let totalWeight = 0;
+        let weightedTotal = 0;
+
+        for (const combatantId of combatantIds) {
+            const initiative = Number(initiativeByCombatantId[combatantId]);
+            const weight = Number(weightByCombatantId[combatantId]);
+            const safeInitiative = Number.isFinite(initiative) ? initiative : 0;
+            const safeWeight = Number.isFinite(weight) && weight > 0 ? weight : 1;
+            totalWeight += safeWeight;
+            weightedTotal += safeInitiative * safeWeight;
+        }
+
+        const roll = totalWeight > 0 ? Number((weightedTotal / totalWeight).toFixed(2)) : 0;
+        return {
+            ...normalizeSideData(side.id, side),
+            combatantIds,
+            roll,
+            tieBreaker: random()
+        };
+    });
+
+    const ordered = [...rolls].sort((a, b) => {
+        if (b.roll !== a.roll) return b.roll - a.roll;
+        if (b.tieBreaker !== a.tieBreaker) return b.tieBreaker - a.tieBreaker;
+        return a.id.localeCompare(b.id);
+    });
+
+    return {
+        rolls,
+        order: ordered.map((side) => side.id),
+        fallbackUsed: false
     };
 }
 

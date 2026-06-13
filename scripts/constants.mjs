@@ -11,12 +11,20 @@ export const COMBATANT_SIDE_SOURCE_FLAG = "sideSource";
 /** @type {string} */
 export const COMMANDER_CONTROL_SETTING = "commanderControl";
 /** @type {string} */
+export const INITIATIVE_METHOD_SETTING = "initiativeMethod";
+/** @type {string} */
 export const SOCKET_EVENT = `module.${MODULE_ID}`;
 
 /** @type {{ sideOwners: string, gmOnly: string }} */
 export const COMMANDER_CONTROL_OPTIONS = {
     sideOwners: "side-owners",
     gmOnly: "gm-only"
+};
+
+/** @type {{ sideD20: string, weightedAverage: string }} */
+export const INITIATIVE_METHOD_OPTIONS = {
+    sideD20: "side-d20",
+    weightedAverage: "weighted-combatant-average"
 };
 
 /** @type {readonly string[]} */
@@ -30,9 +38,10 @@ export const DEFAULT_SIDE_DATA = {
     monsters: { id: "monsters", name: "Monsters", color: "#b93a3a" }
 };
 
-/** @type {{ groupByDisposition: string, showTrackerControls: string, commanderControl: string }} */
+/** @type {{ groupByDisposition: string, showTrackerControls: string, commanderControl: string, initiativeMethod: string }} */
 export const SETTINGS = {
     groupByDisposition: "groupByDisposition",
     showTrackerControls: "showTrackerControls",
-    commanderControl: COMMANDER_CONTROL_SETTING
+    commanderControl: COMMANDER_CONTROL_SETTING,
+    initiativeMethod: INITIATIVE_METHOD_SETTING
 };

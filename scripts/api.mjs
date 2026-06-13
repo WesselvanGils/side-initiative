@@ -16,11 +16,13 @@ import {
     isTokenOnActiveSide,
     normalizeSideId,
     rollSideInitiativeData,
+    rollWeightedSideInitiativeData,
     setCombatState,
     setCombatantSide,
-    setCombatantSideSource
+    setCombatantSideSource,
+    getCombatantInitiativeWeight
 } from "./logic.mjs";
-import { COMMANDER_CONTROL_OPTIONS, MODULE_ID, SETTINGS, SOCKET_EVENT } from "./constants.mjs";
+import { COMMANDER_CONTROL_OPTIONS, INITIATIVE_METHOD_OPTIONS, MODULE_ID, SETTINGS, SOCKET_EVENT } from "./constants.mjs";
 
 /**
  * @param {object | null | undefined} combat
@@ -76,6 +78,152 @@ async function syncCombatToSide(combat, sideId, { roundDelta = 0 } = {}) {
     }
 
     return state;
+}
+
+/**
+ * Resolve combatant documents from a combat document.
+ * @param {object | null | undefined} combat
+ * @returns {Array<object>}
+ */
+function getCombatantEntries(combat) {
+    const combatants = combat?.combatants;
+    if (!combatants) return [];
+    if (typeof combatants.values === "function") return Array.from(combatants.values());
+    if (Array.isArray(combatants.contents)) return combatants.contents;
+    if (typeof combatants[Symbol.iterator] === "function") return Array.from(combatants);
+    return Array.from(combatants ?? []);
+}
+
+/**
+ * Roll side initiative using one d20 per side.
+ * @param {object} resolvedCombat
+ * @param {{ random?: () => number }} [options]
+ * @returns {Promise<object | null>}
+ */
+async function rollStandardSideInitiative(resolvedCombat, { random = Math.random } = {}) {
+    await SideInitiativeAPI.refreshCombatantSides(resolvedCombat);
+
+    const state = getCombatState(resolvedCombat);
+    const sideSummary = getSideSummary(resolvedCombat);
+    const rollResult = rollSideInitiativeData(sideSummary, random);
+    const nextState = {
+        ...state,
+        order: rollResult.order,
+        lastRolls: Object.fromEntries(rollResult.rolls.map((side) => [side.id, side.roll])),
+        lastRolledRound: resolvedCombat.round,
+        activeSideId: rollResult.order[0] ?? null,
+        activeSideIndex: 0,
+        activeCombatantId: null,
+        sides: {
+            ...state.sides
+        }
+    };
+
+    for (const side of rollResult.rolls) {
+        nextState.sides[side.id] = {
+            ...(nextState.sides[side.id] ?? side),
+            ...side,
+            combatantIds: side.combatantIds ?? nextState.sides[side.id]?.combatantIds ?? []
+        };
+    }
+
+    await saveState(resolvedCombat, nextState);
+
+    const updates = [];
+    for (const side of rollResult.rolls) {
+        for (const combatantId of side.combatantIds ?? []) {
+            updates.push({
+                _id: combatantId,
+                initiative: side.roll
+            });
+        }
+    }
+    if (updates.length) {
+        await resolvedCombat.updateEmbeddedDocuments("Combatant", updates);
+    }
+
+    const firstSide = rollResult.order[0];
+    if (firstSide) {
+        await syncCombatToSide(resolvedCombat, firstSide, { roundDelta: 0 });
+    }
+
+    return nextState;
+}
+
+/**
+ * Roll side initiative using weighted combatant averages.
+ * @param {object} resolvedCombat
+ * @param {{ random?: () => number, refresh?: boolean }} [options]
+ * @returns {Promise<object | null>}
+ */
+async function rollWeightedSideInitiative(resolvedCombat, { random = Math.random, refresh = true } = {}) {
+    if (refresh) {
+        await SideInitiativeAPI.refreshCombatantSides(resolvedCombat);
+    }
+
+    const combatants = getCombatantEntries(resolvedCombat);
+    const initiativeByCombatantId = {};
+    const weightByCombatantId = {};
+
+    await Promise.all(combatants.map(async (combatant) => {
+        if (!combatant?.id) return;
+        const roll = combatant?.getInitiativeRoll?.();
+        if (!roll) {
+            initiativeByCombatantId[combatant.id] = 0;
+            weightByCombatantId[combatant.id] = getCombatantInitiativeWeight(combatant);
+            return;
+        }
+
+        await roll.evaluate();
+        initiativeByCombatantId[combatant.id] = Number.isFinite(roll.total) ? roll.total : 0;
+        weightByCombatantId[combatant.id] = getCombatantInitiativeWeight(combatant);
+    }));
+
+    const state = getCombatState(resolvedCombat);
+    const sideSummary = getSideSummary(resolvedCombat);
+    const rollResult = rollWeightedSideInitiativeData(sideSummary, initiativeByCombatantId, weightByCombatantId, random);
+    const nextState = {
+        ...state,
+        order: rollResult.order,
+        lastRolls: Object.fromEntries(rollResult.rolls.map((side) => [side.id, side.roll])),
+        lastRolledRound: resolvedCombat.round,
+        activeSideId: rollResult.order[0] ?? null,
+        activeSideIndex: 0,
+        activeCombatantId: null,
+        sides: {
+            ...state.sides
+        }
+    };
+
+    for (const side of rollResult.rolls) {
+        nextState.sides[side.id] = {
+            ...(nextState.sides[side.id] ?? side),
+            ...side,
+            combatantIds: side.combatantIds ?? nextState.sides[side.id]?.combatantIds ?? []
+        };
+    }
+
+    await saveState(resolvedCombat, nextState);
+
+    const updates = [];
+    for (const side of rollResult.rolls) {
+        for (const combatantId of side.combatantIds ?? []) {
+            updates.push({
+                _id: combatantId,
+                initiative: side.roll
+            });
+        }
+    }
+    if (updates.length) {
+        await resolvedCombat.updateEmbeddedDocuments("Combatant", updates);
+    }
+
+    const firstSide = rollResult.order[0];
+    if (firstSide) {
+        await syncCombatToSide(resolvedCombat, firstSide, { roundDelta: 0 });
+    }
+
+    return nextState;
 }
 
 /**
@@ -157,10 +305,11 @@ export async function handleCommanderSocketRequest(message = {}, senderUserId = 
 /**
  * Side initiative API surface.
  * @type {{
- *   MODULE_ID: string,
- *   refreshCombatantSides(combat?: object | null, options?: { overwrite?: boolean, groupByDisposition?: boolean }): Promise<object | null>,
- *   rollSideInitiative(combat?: object | null, options?: { random?: () => number }): Promise<object | null>,
- *   assignCombatantSide(combatant: object | null | undefined, sideId: string, options?: { source?: string }): Promise<string | null>,
+  *   MODULE_ID: string,
+  *   refreshCombatantSides(combat?: object | null, options?: { overwrite?: boolean, groupByDisposition?: boolean }): Promise<object | null>,
+  *   rollSideInitiative(combat?: object | null, options?: { random?: () => number }): Promise<object | null>,
+ *   rollWeightedSideInitiative(combat?: object | null, options?: { random?: () => number, refresh?: boolean }): Promise<object | null>,
+   *   assignCombatantSide(combatant: object | null | undefined, sideId: string, options?: { source?: string }): Promise<string | null>,
  *   setSideCommander(combat: object | null | undefined, combatant: object | null | undefined): Promise<object | null>,
  *   requestSideCommander(combat: object | null | undefined, combatant: object | null | undefined): Promise<boolean>,
  *   getSideCommander(combat?: object | null, sideId?: string): object | null,
@@ -190,54 +339,17 @@ export const SideInitiativeAPI = {
     async rollSideInitiative(combat = null, { random = Math.random } = {}) {
         const resolvedCombat = getCombatFromArgument(combat);
         if (!resolvedCombat) return null;
-
-        await this.refreshCombatantSides(resolvedCombat);
-
-        const state = getCombatState(resolvedCombat);
-        const sideSummary = getSideSummary(resolvedCombat);
-        const rollResult = rollSideInitiativeData(sideSummary, random);
-        const nextState = {
-            ...state,
-            order: rollResult.order,
-            lastRolls: Object.fromEntries(rollResult.rolls.map((side) => [side.id, side.roll])),
-            lastRolledRound: resolvedCombat.round,
-            activeSideId: rollResult.order[0] ?? null,
-            activeSideIndex: 0,
-            activeCombatantId: null,
-            sides: {
-                ...state.sides
-            }
-        };
-
-        for (const side of rollResult.rolls) {
-            nextState.sides[side.id] = {
-                ...(nextState.sides[side.id] ?? side),
-                ...side,
-                combatantIds: side.combatantIds ?? nextState.sides[side.id]?.combatantIds ?? []
-            };
+        const initiativeMethod = globalThis.game?.settings?.get?.(MODULE_ID, SETTINGS.initiativeMethod);
+        if (initiativeMethod === INITIATIVE_METHOD_OPTIONS.weightedAverage) {
+            return rollWeightedSideInitiative(resolvedCombat, { random, refresh: true });
         }
+        return rollStandardSideInitiative(resolvedCombat, { random });
+    },
 
-        await saveState(resolvedCombat, nextState);
-
-        const updates = [];
-        for (const side of rollResult.rolls) {
-            for (const combatantId of side.combatantIds ?? []) {
-                updates.push({
-                    _id: combatantId,
-                    initiative: side.roll
-                });
-            }
-        }
-        if (updates.length) {
-            await resolvedCombat.updateEmbeddedDocuments("Combatant", updates);
-        }
-
-        const firstSide = rollResult.order[0];
-        if (firstSide) {
-            await syncCombatToSide(resolvedCombat, firstSide, { roundDelta: 0 });
-        }
-
-        return nextState;
+    async rollWeightedSideInitiative(combat = null, { random = Math.random, refresh = true } = {}) {
+        const resolvedCombat = getCombatFromArgument(combat);
+        if (!resolvedCombat) return null;
+        return rollWeightedSideInitiative(resolvedCombat, { random, refresh });
     },
 
     async assignCombatantSide(combatant, sideId, { source = "manual" } = {}) {

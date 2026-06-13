@@ -5,6 +5,7 @@ Foundry VTT module for the 2014 DMG side initiative variant.
 ## What it does
 
 - Rolls one unmodified `1d20` per side.
+- Can optionally roll every combatant at combat start and use a weighted side average instead.
 - Rerolls tied side totals until the tie breaks.
 - Keeps combatant side assignments on combatant flags.
 - Adds combat tracker controls for side rolling and editing.
@@ -15,8 +16,9 @@ Foundry VTT module for the 2014 DMG side initiative variant.
 1. Install the module into your Foundry `Data/modules/side-initiative` folder.
 2. Enable the module in the world.
 3. Open a combat and click the side initiative dice button in the combat tracker.
-4. Use the editor to reassign combatants if the defaults need adjustment.
-5. Use the crown button in the combat tracker row to assign a commander for a side.
+4. If you want weighted combat starts, set `Initiative method` to `Weighted combatant average` in the module settings.
+5. Use the editor to reassign combatants if the defaults need adjustment.
+6. Use the crown button in the combat tracker row to assign a commander for a side.
 
 Commander changes default to side owners and can be restricted to the GM in the module settings.
 
