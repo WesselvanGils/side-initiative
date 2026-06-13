@@ -3,15 +3,26 @@ import { getCombatState, getOrderedSideIds } from "./logic.mjs";
 
 const PATCH_SYMBOL = Symbol.for("side-initiative.combat-patches");
 
+/**
+ * @returns {Function | null}
+ */
 function getCombatClass() {
     return globalThis.CONFIG?.Combat?.documentClass ?? globalThis.Combat ?? null;
 }
 
+/**
+ * @param {object | null | undefined} combat
+ * @returns {boolean}
+ */
 function isSideCombat(combat) {
     const state = getCombatState(combat);
     return Boolean(state.activeSideId);
 }
 
+/**
+ * Install combat turn patches for side initiative.
+ * @returns {void}
+ */
 export function installCombatPatches() {
     const CombatClass = getCombatClass();
     if (!CombatClass || CombatClass.prototype[PATCH_SYMBOL]) return;

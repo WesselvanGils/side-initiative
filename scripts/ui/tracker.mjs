@@ -2,10 +2,20 @@ import { SETTINGS } from "../constants.mjs";
 import { getActiveSideId, getSideSummary, normalizeSideId } from "../logic.mjs";
 import { openSideEditor } from "./side-editor.mjs";
 
+/**
+ * @param {unknown} html
+ * @returns {HTMLElement | JQuery | unknown}
+ */
 function getRoot(html) {
     return html?.[0] ?? html;
 }
 
+/**
+ * @param {string} label
+ * @param {string} icon
+ * @param {Record<string, string | number | boolean>} [dataset]
+ * @returns {string}
+ */
 function iconButton(label, icon, dataset = {}) {
     const attrs = Object.entries(dataset)
         .map(([key, value]) => `data-${key}="${String(value)}"`)
@@ -13,6 +23,11 @@ function iconButton(label, icon, dataset = {}) {
     return `<button type="button" class="control" ${attrs} aria-label="${label}" title="${label}"><i class="${icon}"></i></button>`;
 }
 
+/**
+ * @param {{ id: string, name: string, color?: string | null }} side
+ * @param {string | null} currentSideId
+ * @returns {string}
+ */
 function renderSideChip(side, currentSideId) {
     const active = normalizeSideId(side.id) === normalizeSideId(currentSideId);
     const colorStyle = side.color ? `style="--side-chip-color:${side.color};"` : "";
@@ -23,11 +38,21 @@ function renderSideChip(side, currentSideId) {
   `;
 }
 
+/**
+ * @param {object} combat
+ * @param {string} combatantId
+ * @returns {{ id: string, name: string, color: string, combatantIds: string[] } | null}
+ */
 function resolveCombatantSide(combat, combatantId) {
     const sides = getSideSummary(combat);
     return sides.find((side) => side.combatantIds.includes(combatantId)) ?? null;
 }
 
+/**
+ * @param {HTMLElement} row
+ * @param {{ id: string, name: string, color?: string | null }} side
+ * @returns {void}
+ */
 function injectSideStrip(row, side) {
     row.classList.add("side-initiative-row");
     row.dataset.sideId = side.id;
@@ -42,6 +67,11 @@ function injectSideStrip(row, side) {
     row.prepend(strip);
 }
 
+/**
+ * @param {object} app
+ * @param {unknown} html
+ * @returns {void}
+ */
 function bindCombatTrackerRowData(app, html) {
     const root = getRoot(html);
     if (!root) return;
@@ -54,6 +84,12 @@ function bindCombatTrackerRowData(app, html) {
     }
 }
 
+/**
+ * Render the side initiative toolbar inside the combat tracker.
+ * @param {object} app
+ * @param {unknown} html
+ * @returns {void}
+ */
 export function renderCombatTracker(app, html) {
     if (!game.user?.isGM && !game.user?.can?.("COMBAT_TRACKER")) return;
     if (!game.settings.get("side-initiative", SETTINGS.showTrackerControls)) return;

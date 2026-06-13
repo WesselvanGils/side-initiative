@@ -16,11 +16,20 @@ import {
 } from "./logic.mjs";
 import { MODULE_ID } from "./constants.mjs";
 
+/**
+ * @param {object | null | undefined} combat
+ * @returns {object | null}
+ */
 function getCombatFromArgument(combat) {
     if (combat) return combat;
     return game?.combat ?? null;
 }
 
+/**
+ * @param {object} combat
+ * @param {object} state
+ * @returns {Promise<object | null>}
+ */
 async function saveState(combat, state) {
     if (!combat) return null;
     const nextState = cloneSideStateForSave(state, combat.combatants);
@@ -28,6 +37,12 @@ async function saveState(combat, state) {
     return nextState;
 }
 
+/**
+ * @param {object} combat
+ * @param {string} sideId
+ * @param {{ roundDelta?: number }} [options]
+ * @returns {Promise<object>}
+ */
 async function syncCombatToSide(combat, sideId, { roundDelta = 0 } = {}) {
     const normalizedSideId = normalizeSideId(sideId);
     const combatant = getSideRepresentativeCombatant(combat, normalizedSideId);
@@ -57,6 +72,13 @@ async function syncCombatToSide(combat, sideId, { roundDelta = 0 } = {}) {
     return state;
 }
 
+/**
+ * @param {string | null} currentSideId
+ * @param {string | null} nextSideId
+ * @param {number} [direction]
+ * @param {string[]} [sideIds]
+ * @returns {number}
+ */
 function getNextRoundDelta(currentSideId, nextSideId, direction = 1, sideIds = []) {
     if (!sideIds.length) return 0;
     const currentIndex = Math.max(0, sideIds.indexOf(currentSideId));
@@ -67,6 +89,19 @@ function getNextRoundDelta(currentSideId, nextSideId, direction = 1, sideIds = [
     return nextIndex >= currentIndex ? -1 : 0;
 }
 
+/**
+ * Side initiative API surface.
+ * @type {{
+ *   MODULE_ID: string,
+ *   refreshCombatantSides(combat?: object | null, options?: { overwrite?: boolean, groupByDisposition?: boolean }): Promise<object | null>,
+ *   rollSideInitiative(combat?: object | null, options?: { random?: () => number }): Promise<object | null>,
+ *   assignCombatantSide(combatant: object | null | undefined, sideId: string, options?: { source?: string }): Promise<string | null>,
+ *   setActiveSide(combat?: object | null, sideId: string): Promise<object | null>,
+ *   advanceSide(combat?: object | null, direction?: number): Promise<object | null>,
+ *   getSideState(combat?: object | null): Array<object> | null,
+ *   canCombatantAct(combatant: object | null | undefined, combat?: object | null): boolean
+ * }}
+ */
 export const SideInitiativeAPI = {
     MODULE_ID,
     async refreshCombatantSides(combat = null, { overwrite = false, groupByDisposition = true } = {}) {

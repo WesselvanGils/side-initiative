@@ -1,11 +1,18 @@
+/** @type {string} */
 export const MODULE_ID = "side-initiative";
+/** @type {string} */
 export const FLAG_SCOPE = MODULE_ID;
+/** @type {string} */
 export const SIDE_STATE_FLAG = "state";
+/** @type {string} */
 export const COMBATANT_SIDE_FLAG = "sideId";
+/** @type {string} */
 export const COMBATANT_SIDE_SOURCE_FLAG = "sideSource";
 
+/** @type {readonly string[]} */
 export const DEFAULT_SIDE_ORDER = ["players", "allies", "neutral", "monsters"];
 
+/** @type {Record<string, { id: string, name: string, color: string }>} */
 export const DEFAULT_SIDE_DATA = {
     players: { id: "players", name: "Players", color: "#2d8f5f" },
     allies: { id: "allies", name: "Allies", color: "#4aa86e" },
@@ -13,6 +20,7 @@ export const DEFAULT_SIDE_DATA = {
     monsters: { id: "monsters", name: "Monsters", color: "#b93a3a" }
 };
 
+/** @type {{ groupByDisposition: string, showTrackerControls: string }} */
 export const SETTINGS = {
     groupByDisposition: "groupByDisposition",
     showTrackerControls: "showTrackerControls"

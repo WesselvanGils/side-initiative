@@ -1,10 +1,18 @@
 import { MODULE_ID } from "../constants.mjs";
 import { collectCombatantSides, getCombatState, normalizeCombatState, normalizeSideData, normalizeSideId, setCombatState, setCombatantSide, setCombatantSideSource } from "../logic.mjs";
 
+/**
+ * @param {unknown} html
+ * @returns {HTMLElement | JQuery | unknown}
+ */
 function getFormElement(html) {
     return html?.[0] ?? html?.element?.[0] ?? html;
 }
 
+/**
+ * @param {object} combat
+ * @returns {{ id: string, name: string, color: string, roll: number | null, combatantIds: string[] }[]}
+ */
 function buildSideRows(combat) {
     const state = getCombatState(combat);
     const sideMap = collectCombatantSides(combat);
@@ -21,6 +29,11 @@ function buildSideRows(combat) {
         });
 }
 
+/**
+ * @param {object} combatant
+ * @param {string[]} sideIds
+ * @returns {string}
+ */
 function renderCombatantRow(combatant, sideIds) {
     const assigned = normalizeSideId(combatant.getFlag(MODULE_ID, "sideId") ?? "");
     return `
@@ -35,6 +48,11 @@ function renderCombatantRow(combatant, sideIds) {
   `;
 }
 
+/**
+ * Open the side editor dialog.
+ * @param {object} combat
+ * @returns {void}
+ */
 export function openSideEditor(combat) {
     if (!combat) return;
     const rows = buildSideRows(combat);

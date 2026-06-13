@@ -34,13 +34,14 @@ function createCombatant({ id, hasPlayerOwner = false, disposition = 0, sideId =
     };
 }
 
-function createCombat(combatants, state = null) {
+function createCombat(combatants, state = null, turns = null) {
     let combatState = state;
     return {
         round: 1,
         turn: 0,
         started: true,
         combatants,
+        turns: turns ?? combatants,
         lastUpdate: null,
         getFlag(scope, key) {
             if (scope === "side-initiative" && key === "state") return combatState;
@@ -115,6 +116,36 @@ test("isActorOnActiveSide resolves an actor combatant and checks the active side
     assert.equal(getCombatantFromActor(playerActor), combatants[0]);
     assert.equal(isActorOnActiveSide(playerActor, combat), true);
     assert.equal(isActorOnActiveSide(monsterActor, combat), false);
+});
+
+test("advanceSide uses the combat turn order when it differs from combatant order", async () => {
+    const p1 = createCombatant({ id: "pc-1", hasPlayerOwner: true, disposition: 1 });
+    const p2 = createCombatant({ id: "pc-2", hasPlayerOwner: true, disposition: 1 });
+    const m1 = createCombatant({ id: "npc-1", hasPlayerOwner: false, disposition: -1 });
+    const m2 = createCombatant({ id: "npc-2", hasPlayerOwner: false, disposition: -1 });
+    const combat = createCombat(
+        [p1, p2, m1, m2],
+        {
+            activeSideId: "players",
+            order: ["players", "monsters"],
+            sides: {
+                players: { id: "players", combatantIds: ["pc-1", "pc-2"] },
+                monsters: { id: "monsters", combatantIds: ["npc-1", "npc-2"] }
+            }
+        },
+        [p1, m1, p2, m2]
+    );
+
+    await SideInitiativeAPI.advanceSide(combat, 1);
+    assert.equal(combat.lastUpdate.turn, 1);
+    assert.equal(combat.turn, 1);
+    assert.equal(getActiveSideId(combat), "monsters");
+
+    await SideInitiativeAPI.advanceSide(combat, 1);
+    assert.equal(combat.lastUpdate.turn, 0);
+    assert.equal(combat.turn, 0);
+    assert.equal(combat.round, 2);
+    assert.equal(getActiveSideId(combat), "players");
 });
 
 test("rollSideInitiativeData rerolls tied sides until unique", () => {

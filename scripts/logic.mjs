@@ -7,12 +7,77 @@ import {
     SIDE_STATE_FLAG
 } from "./constants.mjs";
 
+/**
+ * @typedef {object} SideData
+ * @property {string} id
+ * @property {string} name
+ * @property {string} color
+ * @property {number | null} [roll]
+ * @property {string[]} [combatantIds]
+ * @property {number} [count]
+ * @property {boolean} [active]
+ * @property {string} [tone]
+ */
+
+/**
+ * @typedef {object} CombatState
+ * @property {number} version
+ * @property {string[]} order
+ * @property {Record<string, SideData>} sides
+ * @property {number | null} lastRolledRound
+ * @property {Record<string, number>} lastRolls
+ * @property {string | null} activeSideId
+ * @property {number | null} activeSideIndex
+ * @property {string | null} activeCombatantId
+ */
+
+/**
+ * @typedef {object} WorkflowLike
+ * @property {object} [token]
+ * @property {object} [tokenDocument]
+ * @property {object} [speaker]
+ * @property {object} [actor]
+ */
+
+/**
+ * @typedef {object} CombatantLike
+ * @property {string} [id]
+ * @property {string} [name]
+ * @property {boolean} [hasPlayerOwner]
+ * @property {number} [disposition]
+ * @property {boolean} [defeated]
+ * @property {(scope: string, key: string) => unknown} [getFlag]
+ * @property {(scope: string, key: string, value: unknown) => Promise<unknown>} [setFlag]
+ * @property {object} [actor]
+ * @property {object} [token]
+ * @property {object} [document]
+ * @property {object} [prototypeToken]
+ */
+
+/**
+ * @typedef {object} ActorLike
+ * @property {CombatantLike | null} [combatant]
+ * @property {() => Array<{ combatant?: CombatantLike }>} [getActiveTokens]
+ * @property {{ combatant?: CombatantLike }} [token]
+ * @property {{ combatant?: CombatantLike }} [prototypeToken]
+ */
+
+/**
+ * Normalize a side identifier into a lowercase slug.
+ * @param {unknown} value
+ * @returns {string}
+ */
 export function normalizeSideId(value) {
     const text = String(value ?? "").trim().toLowerCase();
     const slug = text.replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
     return slug || "side";
 }
 
+/**
+ * Determine whether a combatant is owned by at least one player.
+ * @param {CombatantLike | null | undefined} combatant
+ * @returns {boolean}
+ */
 export function isPlayerOwnedCombatant(combatant) {
     return Boolean(
         combatant?.hasPlayerOwner ||
@@ -22,6 +87,11 @@ export function isPlayerOwnedCombatant(combatant) {
     );
 }
 
+/**
+ * Resolve the numeric disposition for a combatant.
+ * @param {CombatantLike | null | undefined} combatant
+ * @returns {number}
+ */
 export function getCombatantDisposition(combatant) {
     const candidates = [
         combatant?.disposition,
@@ -38,6 +108,11 @@ export function getCombatantDisposition(combatant) {
     return 0;
 }
 
+/**
+ * Derive a default side identifier for a combatant.
+ * @param {CombatantLike | null | undefined} combatant
+ * @returns {string}
+ */
 export function defaultSideIdForCombatant(combatant) {
     if (!combatant) return "neutral";
     if (isPlayerOwnedCombatant(combatant)) return "players";
@@ -47,6 +122,12 @@ export function defaultSideIdForCombatant(combatant) {
     return "neutral";
 }
 
+/**
+ * Resolve the stored side id for a combatant.
+ * @param {CombatantLike | null | undefined} combatant
+ * @param {{ groupByDisposition?: boolean }} [options]
+ * @returns {string}
+ */
 export function getCombatantSideId(combatant, { groupByDisposition = true } = {}) {
     const stored = combatant?.getFlag?.(FLAG_SCOPE, COMBATANT_SIDE_FLAG);
     if (stored) return normalizeSideId(stored);
@@ -54,11 +135,21 @@ export function getCombatantSideId(combatant, { groupByDisposition = true } = {}
     return defaultSideIdForCombatant(combatant);
 }
 
+/**
+ * Read the stored side initiative combat state from a combat document.
+ * @param {object | null | undefined} combat
+ * @returns {CombatState}
+ */
 export function getCombatState(combat) {
     const raw = combat?.getFlag?.(FLAG_SCOPE, SIDE_STATE_FLAG);
     return normalizeCombatState(raw);
 }
 
+/**
+ * Normalize the persisted combat state shape.
+ * @param {Partial<CombatState> & Record<string, unknown>} [raw]
+ * @returns {CombatState}
+ */
 export function normalizeCombatState(raw = {}) {
     const state = {
         version: 1,
@@ -82,6 +173,12 @@ export function normalizeCombatState(raw = {}) {
     return state;
 }
 
+/**
+ * Normalize a side record to the persisted side data shape.
+ * @param {string} sideId
+ * @param {Partial<SideData> & Record<string, unknown>} [raw]
+ * @returns {SideData}
+ */
 export function normalizeSideData(sideId, raw = {}) {
     const normalizedId = normalizeSideId(raw.id ?? sideId);
     const defaults = DEFAULT_SIDE_DATA[normalizedId] ?? {
@@ -98,6 +195,12 @@ export function normalizeSideData(sideId, raw = {}) {
     };
 }
 
+/**
+ * Ensure a combat state has ordered, populated side records.
+ * @param {object | null | undefined} combat
+ * @param {Partial<CombatState> & Record<string, unknown>} [state]
+ * @returns {CombatState}
+ */
 export function ensureCombatState(combat, state = {}) {
     const normalized = normalizeCombatState(state);
     if (!normalized.order.length) {
@@ -114,11 +217,39 @@ export function ensureCombatState(combat, state = {}) {
     return normalized;
 }
 
+/**
+ * Read the stored side source for a combatant.
+ * @param {CombatantLike | null | undefined} combatant
+ * @returns {string | null}
+ */
 export function getCombatantSideSource(combatant) {
     const stored = combatant?.getFlag?.(FLAG_SCOPE, COMBATANT_SIDE_SOURCE_FLAG);
     return stored ? String(stored) : null;
 }
 
+/**
+ * Resolve the combat turn order as an array of combatants.
+ * @param {object | null | undefined} combat
+ * @returns {CombatantLike[]}
+ */
+function getCombatTurnEntries(combat) {
+    const turns = combat?.turns;
+    if (Array.isArray(turns)) return turns;
+    if (Array.isArray(turns?.contents)) return turns.contents;
+    if (typeof turns?.[Symbol.iterator] === "function") return Array.from(turns);
+
+    const combatants = combat?.combatants;
+    if (Array.isArray(combatants?.contents)) return combatants.contents;
+    if (typeof combatants?.values === "function") return Array.from(combatants.values());
+    if (typeof combatants?.[Symbol.iterator] === "function") return Array.from(combatants);
+    return Array.from(combatants ?? []);
+}
+
+/**
+ * Resolve a combatant from an actor-like object.
+ * @param {ActorLike | null | undefined} actor
+ * @returns {CombatantLike | null}
+ */
 export function getCombatantFromActor(actor) {
     if (!actor) return null;
     const activeTokens = actor.getActiveTokens?.() ?? [];
@@ -126,11 +257,24 @@ export function getCombatantFromActor(actor) {
     return actor.combatant ?? activeToken?.combatant ?? actor.token?.combatant ?? actor.prototypeToken?.combatant ?? null;
 }
 
+/**
+ * Determine whether a side contains any members.
+ * @param {object | null | undefined} combat
+ * @param {string} sideId
+ * @returns {boolean}
+ */
 export function hasSideMembers(combat, sideId) {
     const normalizedId = normalizeSideId(sideId);
     return getCombatantsForSide(combat, normalizedId).length > 0;
 }
 
+/**
+ * Collect combatants for a side.
+ * @param {object | null | undefined} combat
+ * @param {string} sideId
+ * @param {{ includeDefeated?: boolean, groupByDisposition?: boolean }} [options]
+ * @returns {CombatantLike[]}
+ */
 export function getCombatantsForSide(combat, sideId, { includeDefeated = true, groupByDisposition = true } = {}) {
     const normalizedId = normalizeSideId(sideId);
     const combatants = Array.from(combat?.combatants ?? []);
@@ -140,6 +284,12 @@ export function getCombatantsForSide(combat, sideId, { includeDefeated = true, g
     });
 }
 
+/**
+ * Collect all side records present in the combat.
+ * @param {object | null | undefined} combat
+ * @param {{ groupByDisposition?: boolean }} [options]
+ * @returns {Map<string, SideData>}
+ */
 export function collectCombatantSides(combat, { groupByDisposition = true } = {}) {
     const combatants = Array.from(combat?.combatants ?? []);
     const sideMap = new Map();
@@ -156,6 +306,12 @@ export function collectCombatantSides(combat, { groupByDisposition = true } = {}
     return sideMap;
 }
 
+/**
+ * Persist side assignments derived from combatant ownership and disposition.
+ * @param {object | null | undefined} combat
+ * @param {{ overwrite?: boolean, groupByDisposition?: boolean }} [options]
+ * @returns {Promise<object | null | undefined>}
+ */
 export async function ensureCombatantSideAssignments(combat, { overwrite = false, groupByDisposition = true } = {}) {
     const combatants = Array.from(combat?.combatants ?? []);
     const updates = [];
@@ -180,10 +336,22 @@ export async function ensureCombatantSideAssignments(combat, { overwrite = false
     return combat;
 }
 
+/**
+ * Roll a single d20.
+ * @param {() => number} [random]
+ * @returns {number}
+ */
 export function rollDie(random = Math.random) {
     return Math.floor(random() * 20) + 1;
 }
 
+/**
+ * Roll initiative for each side and resolve ties.
+ * @param {Array<Partial<SideData> & { id: string }>} sideEntries
+ * @param {() => number} [random]
+ * @param {{ maxAttempts?: number }} [options]
+ * @returns {{ rolls: Array<SideData & { roll: number, tieBreaker: number }>, order: string[], fallbackUsed: boolean }}
+ */
 export function rollSideInitiativeData(sideEntries, random = Math.random, { maxAttempts = 50 } = {}) {
     const rolls = sideEntries.map((side) => ({
         ...normalizeSideData(side.id, side),
@@ -219,6 +387,13 @@ export function rollSideInitiativeData(sideEntries, random = Math.random, { maxA
     };
 }
 
+/**
+ * Group items by a derived key.
+ * @template T
+ * @param {T[]} items
+ * @param {(item: T) => string | number | symbol} iteratee
+ * @returns {Map<string | number | symbol, T[]>}
+ */
 export function groupBy(items, iteratee) {
     const map = new Map();
     for (const item of items) {
@@ -234,6 +409,11 @@ export function resolveSideByCombatant(combat, combatant) {
     return state.sides[getCombatantSideId(combatant)] ?? normalizeSideData(getCombatantSideId(combatant));
 }
 
+/**
+ * Resolve the current combatant for the combat's turn index.
+ * @param {object | null | undefined} combat
+ * @returns {CombatantLike | null}
+ */
 export function getCurrentCombatant(combat) {
     if (!combat) return null;
     const combatant = combat.combatant ?? getCombatantAtTurn(combat, combat.turn);
@@ -242,14 +422,20 @@ export function getCurrentCombatant(combat) {
     return getCombatantAtTurn(combat, index);
 }
 
+/**
+ * Resolve a combatant at a turn index or combatant id.
+ * @param {object | null | undefined} combat
+ * @param {number | string} turn
+ * @returns {CombatantLike | null}
+ */
 export function getCombatantAtTurn(combat, turn) {
     if (!combat) return null;
-    if (combat.combatants?.get && typeof turn === "string") {
-        return combat.combatants.get(turn) ?? null;
+    const list = getCombatTurnEntries(combat);
+    if (typeof turn === "string") {
+        const resolved = list.find((combatant) => (typeof combatant === "string" ? combatant === turn : combatant?.id === turn));
+        if (resolved) return resolved;
+        return combat.combatants?.get?.(turn) ?? null;
     }
-    const list = Array.isArray(combat.combatants?.contents)
-        ? combat.combatants.contents
-        : Array.from(combat.combatants ?? []);
     return list[Number(turn)] ?? null;
 }
 
@@ -321,20 +507,36 @@ export function getSideColor(sideId) {
     return DEFAULT_SIDE_DATA[normalizedId]?.color ?? "#666666";
 }
 
+/**
+ * Resolve a representative combatant for a side.
+ * @param {object | null | undefined} combat
+ * @param {string} sideId
+ * @param {{ groupByDisposition?: boolean }} [options]
+ * @returns {CombatantLike | null}
+ */
 export function getSideRepresentativeCombatant(combat, sideId, { groupByDisposition = true } = {}) {
+    const normalizedId = normalizeSideId(sideId);
+    const turnMembers = getCombatTurnEntries(combat).filter((combatant) => {
+        if (!combatant || combatant.defeated) return false;
+        return getCombatantSideId(combatant, { groupByDisposition }) === normalizedId;
+    });
+    if (turnMembers.length) return turnMembers[0];
+
     const activeMembers = getCombatantsForSide(combat, sideId, { includeDefeated: false, groupByDisposition });
     if (activeMembers.length) return activeMembers[0];
     const allMembers = getCombatantsForSide(combat, sideId, { includeDefeated: true, groupByDisposition });
     return allMembers[0] ?? null;
 }
 
+/**
+ * Resolve a combatant's index in the combat turn order.
+ * @param {object | null | undefined} combat
+ * @param {string} combatantId
+ * @returns {number}
+ */
 export function getCombatantTurnIndex(combat, combatantId) {
-    const list = Array.isArray(combat?.combatants)
-        ? combat.combatants
-        : Array.isArray(combat?.combatants?.contents)
-            ? combat.combatants.contents
-            : Array.from(combat?.combatants ?? []);
-    return list.findIndex((combatant) => combatant.id === combatantId);
+    const list = getCombatTurnEntries(combat);
+    return list.findIndex((combatant) => (typeof combatant === "string" ? combatant === combatantId : combatant?.id === combatantId));
 }
 
 export function getOrderedSideIds(combat, { groupByDisposition = true } = {}) {
@@ -395,12 +597,26 @@ export function dedupeSideOrder(order) {
     return [...new Set(order.map(normalizeSideId))];
 }
 
+/**
+ * Resolve the current combatant-side record.
+ * @param {object | null | undefined} combat
+ * @param {CombatantLike | null | undefined} combatant
+ * @param {{ groupByDisposition?: boolean }} [options]
+ * @returns {SideData}
+ */
 export function getCombatantSideRecord(combat, combatant, { groupByDisposition = true } = {}) {
     const state = getCombatState(combat);
     const sideId = getCombatantSideId(combatant, { groupByDisposition });
     return state.sides[sideId] ?? normalizeSideData(sideId, DEFAULT_SIDE_DATA[sideId] ?? { id: sideId, name: sideId });
 }
 
+/**
+ * Determine whether a combatant is off the active side.
+ * @param {object | null | undefined} combat
+ * @param {CombatantLike | null | undefined} combatant
+ * @param {{ groupByDisposition?: boolean }} [options]
+ * @returns {boolean}
+ */
 export function isOffSideWorkflow(combat, combatant, { groupByDisposition = true } = {}) {
     const activeSideId = getActiveSideId(combat, { groupByDisposition });
     if (!activeSideId) return false;
@@ -408,6 +624,13 @@ export function isOffSideWorkflow(combat, combatant, { groupByDisposition = true
     return normalizeSideId(activeSideId) !== normalizeSideId(sideId);
 }
 
+/**
+ * Determine whether an actor is on the active side.
+ * @param {ActorLike | null | undefined} actor
+ * @param {object | null | undefined} combat
+ * @param {{ groupByDisposition?: boolean }} [options]
+ * @returns {boolean}
+ */
 export function isActorOnActiveSide(actor, combat = null, { groupByDisposition = true } = {}) {
     const resolvedCombat = combat ?? globalThis.game?.combat ?? null;
     if (!resolvedCombat || !resolvedCombat.started || !actor) return false;
@@ -416,10 +639,20 @@ export function isActorOnActiveSide(actor, combat = null, { groupByDisposition =
     return !isOffSideWorkflow(resolvedCombat, combatant, { groupByDisposition });
 }
 
+/**
+ * Resolve a combatant from a token-like object.
+ * @param {object | null | undefined} token
+ * @returns {CombatantLike | null}
+ */
 export function resolveCombatantFromToken(token) {
     return token?.combatant ?? token?.actor?.combatant ?? null;
 }
 
+/**
+ * Resolve a combatant from a MidiQOL workflow-like object.
+ * @param {WorkflowLike | null | undefined} workflow
+ * @returns {CombatantLike | null}
+ */
 export function getCombatantFromWorkflow(workflow) {
     const token = workflow?.token ?? workflow?.tokenDocument ?? workflow?.speaker?.token;
     if (token?.combatant) return token.combatant;
@@ -427,15 +660,33 @@ export function getCombatantFromWorkflow(workflow) {
     return resolveCombatantFromToken(token);
 }
 
+/**
+ * Persist a combat state.
+ * @param {object | null | undefined} combat
+ * @param {CombatState} state
+ * @returns {Promise<unknown>}
+ */
 export async function setCombatState(combat, state) {
     const nextState = normalizeCombatState(state);
     return combat?.setFlag?.(FLAG_SCOPE, SIDE_STATE_FLAG, nextState);
 }
 
+/**
+ * Persist a combatant side assignment.
+ * @param {CombatantLike | null | undefined} combatant
+ * @param {string} sideId
+ * @returns {Promise<unknown>}
+ */
 export async function setCombatantSide(combatant, sideId) {
     return combatant?.setFlag?.(FLAG_SCOPE, COMBATANT_SIDE_FLAG, normalizeSideId(sideId));
 }
 
+/**
+ * Persist a combatant side source.
+ * @param {CombatantLike | null | undefined} combatant
+ * @param {string} source
+ * @returns {Promise<unknown>}
+ */
 export async function setCombatantSideSource(combatant, source) {
     return combatant?.setFlag?.(FLAG_SCOPE, COMBATANT_SIDE_SOURCE_FLAG, source);
 }

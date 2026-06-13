@@ -4,6 +4,10 @@ import { installCombatPatches } from "./combat-controller.mjs";
 import { registerMidiQolIntegration } from "./integration/midi-qol.mjs";
 import { renderCombatTracker } from "./ui/tracker.mjs";
 
+/**
+ * Register module settings.
+ * @returns {void}
+ */
 function registerSettings() {
     game.settings.register(MODULE_ID, SETTINGS.groupByDisposition, {
         name: "SIDE-INITIATIVE.Settings.GroupByDisposition.Name",
@@ -24,6 +28,10 @@ function registerSettings() {
     });
 }
 
+/**
+ * Register Foundry hooks used by the module.
+ * @returns {void}
+ */
 function registerHooks() {
     Hooks.on("renderCombatTracker", renderCombatTracker);
     Hooks.on("createCombat", async (combat) => {
