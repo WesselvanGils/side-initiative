@@ -1,31 +1,31 @@
 {
-  "id": "side-initiative",
-  "title": "Side Initiative",
-  "description": "Foundry VTT side initiative tracker for D&D 5e with MidiQOL-aware warnings.",
-  "version": "0.1.0",
-  "authors": [
-    {
-      "name": "Codex"
+    "id": "side-initiative",
+    "title": "Side Initiative",
+    "description": "Foundry VTT side initiative tracker for D&D 5e",
+    "version": "0.1.0",
+    "authors": [
+        {
+            "name": "Wessel van Gils"
+        }
+    ],
+    "compatibility": {
+        "minimum": "13",
+        "verified": "13"
+    },
+    "esmodules": [
+        "scripts/module.mjs"
+    ],
+    "styles": [
+        "styles/module.css"
+    ],
+    "languages": [
+        {
+            "lang": "en",
+            "name": "English",
+            "path": "lang/en.json"
+        }
+    ],
+    "relationships": {
+        "requires": []
     }
-  ],
-  "compatibility": {
-    "minimum": "13",
-    "verified": "13"
-  },
-  "esmodules": [
-    "scripts/module.js"
-  ],
-  "styles": [
-    "styles/module.css"
-  ],
-  "languages": [
-    {
-      "lang": "en",
-      "name": "English",
-      "path": "lang/en.json"
-    }
-  ],
-  "relationships": {
-    "requires": []
-  }
 }

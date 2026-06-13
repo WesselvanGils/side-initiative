@@ -1,88 +1,90 @@
 .side-initiative-toolbar {
-  display: flex;
-  justify-content: center;
-  flex-wrap: wrap;
-  gap: 0.35rem;
+    display: flex;
+    justify-content: center;
+    flex-wrap: wrap;
+    gap: 0.35rem;
 }
 
 .side-initiative-toolbar .control {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.35rem;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
 }
 
 .side-initiative-panel {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 0.35rem;
-  padding: 0.4rem 0 0.5rem;
-  border-top: 1px solid rgba(127, 127, 127, 0.15);
-  border-bottom: 1px solid rgba(127, 127, 127, 0.15);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.35rem;
+    width: 100%;
+    box-sizing: border-box;
+    padding: 0.4rem 0 0.5rem;
+    border-top: 1px solid rgba(127, 127, 127, 0.15);
+    border-bottom: 1px solid rgba(127, 127, 127, 0.15);
 }
 
 .side-initiative-track {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  flex-wrap: wrap;
-  gap: 0.35rem;
-  width: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-wrap: wrap;
+    gap: 0.35rem;
+    width: 100%;
 }
 
 .side-initiative-panel .side-chip {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.35rem;
-  padding: 0.1rem 0.45rem;
-  border-radius: 4px;
-  border: 1px solid rgba(127, 127, 127, 0.25);
-  background: rgba(0, 0, 0, 0.04);
-  color: inherit;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    padding: 0.1rem 0.45rem;
+    border-radius: 4px;
+    border: 1px solid rgba(127, 127, 127, 0.25);
+    background: rgba(0, 0, 0, 0.04);
+    color: inherit;
 }
 
 .side-initiative-panel .side-chip.is-current {
-  border-color: var(--side-chip-color, rgba(40, 120, 255, 0.75));
+    border-color: var(--side-chip-color, rgba(40, 120, 255, 0.75));
 }
 
 .side-initiative-row {
-  position: relative;
+    position: relative;
 }
 
 .side-initiative-strip {
-  position: absolute;
-  left: 0;
-  top: 0;
-  bottom: 0;
-  width: 4px;
-  border-radius: 2px;
-  pointer-events: none;
+    position: absolute;
+    left: 0;
+    top: 0;
+    bottom: 0;
+    width: 4px;
+    border-radius: 2px;
+    pointer-events: none;
 }
 
 .side-initiative-editor {
-  display: grid;
-  gap: 0.6rem;
+    display: grid;
+    gap: 0.6rem;
 }
 
 .side-initiative-editor section {
-  display: grid;
-  gap: 0.4rem;
+    display: grid;
+    gap: 0.4rem;
 }
 
 .side-initiative-editor table {
-  width: 100%;
-  border-collapse: collapse;
+    width: 100%;
+    border-collapse: collapse;
 }
 
 .side-initiative-editor th,
 .side-initiative-editor td {
-  padding: 0.25rem 0.35rem;
-  text-align: left;
-  vertical-align: middle;
+    padding: 0.25rem 0.35rem;
+    text-align: left;
+    vertical-align: middle;
 }
 
 .side-initiative-editor input[type="text"],
 .side-initiative-editor select {
-  width: 100%;
-  box-sizing: border-box;
+    width: 100%;
+    box-sizing: border-box;
 }

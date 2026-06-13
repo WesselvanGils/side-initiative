@@ -3,6 +3,11 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "test": "node --test tests/logic.test.js"
+    "test": "node --test tests/logic.test.js",
+    "createSymlinks": "node ./tools/create-symlinks.mjs",
+    "postinstall": "npm run createSymlinks"
+  },
+  "devDependencies": {
+    "js-yaml": "^4.2.0"
   }
 }
