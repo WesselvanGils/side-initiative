@@ -22,8 +22,6 @@ Commander changes default to side owners and can be restricted to the GM in the 
 
 ## MidiQOL notes
 
-- The module does not block workflows.
-- MidiQOL's `Record AOO` reaction setting should be set to `Do not check` when using side initiative, otherwise reaction consumption can still be double-counted by MidiQOL.
 - This module uses `midi-qol.preSetReactionUsed` to suppress reaction consumption for actors on the active side.
 
 ## Gambits Premades notes
