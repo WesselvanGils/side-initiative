@@ -1,5 +1,5 @@
 import { MODULE_ID } from "../constants.js";
-import { collectCombatantSides, getCombatState, normalizeCombatState, normalizeSideData, normalizeSideId, setCombatState, setCombatantSide } from "../logic.js";
+import { collectCombatantSides, getCombatState, normalizeCombatState, normalizeSideData, normalizeSideId, setCombatState, setCombatantSide, setCombatantSideSource } from "../logic.js";
 
 function getFormElement(html) {
   return html?.[0] ?? html?.element?.[0] ?? html;
@@ -21,7 +21,7 @@ function buildSideRows(combat) {
     });
 }
 
-function renderCombatantRow(combatant, sideIds, currentSide) {
+function renderCombatantRow(combatant, sideIds) {
   const assigned = normalizeSideId(combatant.getFlag(MODULE_ID, "sideId") ?? "");
   return `
     <tr data-combatant-id="${combatant.id}">
@@ -31,7 +31,6 @@ function renderCombatantRow(combatant, sideIds, currentSide) {
           ${sideIds.map((sideId) => `<option value="${sideId}"${sideId === assigned ? " selected" : ""}>${sideId}</option>`).join("")}
         </select>
       </td>
-      <td>${assigned === currentSide ? "Current" : ""}</td>
     </tr>
   `;
 }
@@ -66,10 +65,10 @@ export function openSideEditor(combat) {
         <h3>Combatants</h3>
         <table>
           <thead>
-            <tr><th>Name</th><th>Side</th><th>Status</th></tr>
+            <tr><th>Name</th><th>Side</th></tr>
           </thead>
           <tbody>
-            ${combatants.map((combatant) => renderCombatantRow(combatant, sideIds, rows.find((side) => side.active)?.id ?? "")).join("")}
+            ${combatants.map((combatant) => renderCombatantRow(combatant, sideIds)).join("")}
           </tbody>
         </table>
       </section>
@@ -103,8 +102,13 @@ export function openSideEditor(combat) {
 
           for (const combatant of combat.combatants ?? []) {
             const nextSide = formData.get(`combatant-${combatant.id}`);
-            if (nextSide) await setCombatantSide(combatant, nextSide);
+            if (nextSide) {
+              await setCombatantSide(combatant, nextSide);
+              await setCombatantSideSource(combatant, "manual");
+            }
           }
+
+          await game.sideInitiative?.refreshCombatantSides?.(combat, { overwrite: false });
         }
       },
       cancel: {

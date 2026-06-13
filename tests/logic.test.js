@@ -3,10 +3,65 @@ import assert from "node:assert/strict";
 import { SideInitiativeAPI } from "../scripts/api.js";
 import {
   defaultSideIdForCombatant,
+  ensureCombatantSideAssignments,
+  getActiveSideId,
+  getNextSideId,
   groupBy,
   normalizeSideId,
   rollSideInitiativeData
 } from "../scripts/logic.js";
+
+function createCombatant({ id, hasPlayerOwner = false, disposition = 0, sideId = null, sideSource = null }) {
+  const flags = new Map();
+  if (sideId) flags.set("side-initiative:sideId", sideId);
+  if (sideSource) flags.set("side-initiative:sideSource", sideSource);
+
+  return {
+    id,
+    name: id,
+    hasPlayerOwner,
+    disposition,
+    getFlag(scope, key) {
+      return flags.get(`${scope}:${key}`) ?? null;
+    },
+    setFlag(scope, key, value) {
+      flags.set(`${scope}:${key}`, value);
+      return Promise.resolve(value);
+    },
+    flags
+  };
+}
+
+function createCombat(combatants, state = null) {
+  let combatState = state;
+  return {
+    round: 1,
+    turn: 0,
+    started: true,
+    combatants,
+    lastUpdate: null,
+    getFlag(scope, key) {
+      if (scope === "side-initiative" && key === "state") return combatState;
+      return null;
+    },
+    setFlag(scope, key, value) {
+      if (scope === "side-initiative" && key === "state") {
+        combatState = value;
+      }
+      return Promise.resolve(value);
+    },
+    updateEmbeddedDocuments(_type, docs) {
+      this.lastEmbedded = docs;
+      return Promise.resolve();
+    },
+    update(data) {
+      this.lastUpdate = data;
+      if (typeof data.round === "number") this.round = data.round;
+      if (typeof data.turn === "number") this.turn = data.turn;
+      return Promise.resolve();
+    }
+  };
+}
 
 test("normalizeSideId slugifies values", () => {
   assert.equal(normalizeSideId("  Monster Squad! "), "monster-squad");
@@ -20,22 +75,32 @@ test("defaultSideIdForCombatant groups by owner and disposition", () => {
   assert.equal(defaultSideIdForCombatant({ hasPlayerOwner: false, disposition: -1 }), "monsters");
 });
 
+test("ensureCombatantSideAssignments writes auto groups and preserves manual overrides", async () => {
+  const combatants = [
+    createCombatant({ id: "pc-1", hasPlayerOwner: true, disposition: 1 }),
+    createCombatant({ id: "npc-1", hasPlayerOwner: false, disposition: -1 }),
+    createCombatant({ id: "npc-2", hasPlayerOwner: false, disposition: 0, sideId: "neutral", sideSource: "manual" })
+  ];
+  const combat = createCombat(combatants);
+
+  await ensureCombatantSideAssignments(combat);
+
+  assert.equal(combatants[0].getFlag("side-initiative", "sideId"), "players");
+  assert.equal(combatants[0].getFlag("side-initiative", "sideSource"), "auto");
+  assert.equal(combatants[1].getFlag("side-initiative", "sideId"), "monsters");
+  assert.equal(combatants[1].getFlag("side-initiative", "sideSource"), "auto");
+  assert.equal(combatants[2].getFlag("side-initiative", "sideId"), "neutral");
+  assert.equal(combatants[2].getFlag("side-initiative", "sideSource"), "manual");
+});
+
 test("rollSideInitiativeData rerolls tied sides until unique", () => {
   const rng = (() => {
-    const values = [
-      0.1, 0.5,
-      0.1, 0.6,
-      0.4, 0.7,
-      0.8, 0.2
-    ];
+    const values = [0.1, 0.5, 0.1, 0.6, 0.4, 0.7, 0.8, 0.2];
     let index = 0;
     return () => values[index++ % values.length];
   })();
 
-  const result = rollSideInitiativeData(
-    [{ id: "players" }, { id: "monsters" }, { id: "allies" }],
-    rng
-  );
+  const result = rollSideInitiativeData([{ id: "players" }, { id: "monsters" }, { id: "allies" }], rng);
 
   assert.equal(result.order.length, 3);
   assert.equal(new Set(result.order).size, 3);
@@ -46,67 +111,14 @@ test("rollSideInitiativeData rerolls tied sides until unique", () => {
   assert.equal(new Set(result.rolls.map((entry) => entry.roll)).size, 3);
 });
 
-test("SideInitiativeAPI rolls and writes combat initiatives", async () => {
+test("SideInitiativeAPI rolls and advances by side", async () => {
   const combatants = [
-    {
-      id: "pc-1",
-      name: "PC 1",
-      hasPlayerOwner: true,
-      disposition: 1,
-      getFlag() {
-        return null;
-      },
-      setFlag() {
-        return Promise.resolve();
-      }
-    },
-    {
-      id: "npc-1",
-      name: "NPC 1",
-      hasPlayerOwner: false,
-      disposition: -1,
-      getFlag() {
-        return null;
-      },
-      setFlag() {
-        return Promise.resolve();
-      }
-    },
-    {
-      id: "npc-2",
-      name: "NPC 2",
-      hasPlayerOwner: false,
-      disposition: -1,
-      getFlag() {
-        return null;
-      },
-      setFlag() {
-        return Promise.resolve();
-      }
-    }
+    createCombatant({ id: "pc-1", hasPlayerOwner: true, disposition: 1 }),
+    createCombatant({ id: "pc-2", hasPlayerOwner: true, disposition: 1 }),
+    createCombatant({ id: "npc-1", hasPlayerOwner: false, disposition: -1 }),
+    createCombatant({ id: "npc-2", hasPlayerOwner: false, disposition: -1 })
   ];
-
-  const updates = [];
-  const combat = {
-    round: 1,
-    turn: 0,
-    started: true,
-    combatants,
-    getFlag() {
-      return null;
-    },
-    setFlag() {
-      return Promise.resolve();
-    },
-    updateEmbeddedDocuments(_type, docs) {
-      updates.push(...docs);
-      return Promise.resolve();
-    },
-    update(data) {
-      this.lastUpdate = data;
-      return Promise.resolve();
-    }
-  };
+  const combat = createCombat(combatants);
 
   const state = await SideInitiativeAPI.rollSideInitiative(combat, {
     random: (() => {
@@ -117,9 +129,33 @@ test("SideInitiativeAPI rolls and writes combat initiatives", async () => {
   });
 
   assert.equal(state.order.length, 2);
-  assert.equal(updates.length, 3);
-  assert.equal(combat.lastUpdate.turn, 0);
-  assert.equal(combat.lastUpdate.round, 1);
+  assert.equal(getActiveSideId(combat), state.order[0]);
+  assert.equal(combat.round, 1);
+  assert.equal(typeof combat.lastUpdate.turn, "number");
+
+  await SideInitiativeAPI.advanceSide(combat, 1);
+  assert.equal(getActiveSideId(combat), state.order[1]);
+
+  await SideInitiativeAPI.advanceSide(combat, 1);
+  assert.equal(getActiveSideId(combat), state.order[0]);
+  assert.equal(combat.round, 2);
+});
+
+test("getNextSideId skips empty sides", () => {
+  const combatants = [
+    createCombatant({ id: "pc-1", hasPlayerOwner: true, disposition: 1 }),
+    createCombatant({ id: "npc-1", hasPlayerOwner: false, disposition: -1 })
+  ];
+  const combat = createCombat(combatants, {
+    activeSideId: "players",
+    order: ["players", "allies", "neutral", "monsters"],
+    sides: {
+      players: { id: "players", combatantIds: ["pc-1"] },
+      monsters: { id: "monsters", combatantIds: ["npc-1"] }
+    }
+  });
+
+  assert.equal(getNextSideId(combat, 1), "monsters");
 });
 
 test("groupBy groups values by key", () => {

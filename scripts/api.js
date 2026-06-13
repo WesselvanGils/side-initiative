@@ -1,25 +1,24 @@
 import {
   cloneSideStateForSave,
+  ensureCombatantSideAssignments,
+  getActiveSideId,
   getCombatState,
+  getCombatantTurnIndex,
+  getNextSideId,
+  getOrderedSideIds,
+  getSideRepresentativeCombatant,
   getSideSummary,
   normalizeSideId,
   rollSideInitiativeData,
   setCombatState,
-  setCombatantActedRound,
-  setCombatantSide
+  setCombatantSide,
+  setCombatantSideSource
 } from "./logic.js";
 import { MODULE_ID } from "./constants.js";
 
 function getCombatFromArgument(combat) {
   if (combat) return combat;
   return game?.combat ?? null;
-}
-
-function getCombatantList(combat) {
-  if (!combat) return [];
-  if (Array.isArray(combat.combatants)) return combat.combatants;
-  if (Array.isArray(combat.combatants?.contents)) return combat.combatants.contents;
-  return Array.from(combat.combatants ?? []);
 }
 
 async function saveState(combat, state) {
@@ -29,11 +28,61 @@ async function saveState(combat, state) {
   return nextState;
 }
 
+async function syncCombatToSide(combat, sideId, { roundDelta = 0 } = {}) {
+  const normalizedSideId = normalizeSideId(sideId);
+  const combatant = getSideRepresentativeCombatant(combat, normalizedSideId);
+  const state = getCombatState(combat);
+  const sideIds = getOrderedSideIds(combat);
+
+  state.activeSideId = normalizedSideId;
+  state.activeSideIndex = Math.max(0, sideIds.indexOf(normalizedSideId));
+  state.activeCombatantId = combatant?.id ?? null;
+
+  await setCombatState(combat, cloneSideStateForSave(state, combat.combatants));
+
+  const updates = {};
+  if (Number.isFinite(roundDelta) && roundDelta !== 0) {
+    updates.round = Math.max(1, (combat.round ?? 1) + roundDelta);
+  }
+  if (combatant) {
+    const turn = getCombatantTurnIndex(combat, combatant.id);
+    if (turn >= 0) {
+      updates.turn = turn;
+    }
+  }
+  if (Object.keys(updates).length) {
+    await combat.update(updates);
+  }
+
+  return state;
+}
+
+function getNextRoundDelta(currentSideId, nextSideId, direction = 1, sideIds = []) {
+  if (!sideIds.length) return 0;
+  const currentIndex = Math.max(0, sideIds.indexOf(currentSideId));
+  const nextIndex = Math.max(0, sideIds.indexOf(nextSideId));
+  if (direction >= 0) {
+    return nextIndex <= currentIndex ? 1 : 0;
+  }
+  return nextIndex >= currentIndex ? -1 : 0;
+}
+
 export const SideInitiativeAPI = {
   MODULE_ID,
+  async refreshCombatantSides(combat = null, { overwrite = false, groupByDisposition = true } = {}) {
+    const resolvedCombat = getCombatFromArgument(combat);
+    if (!resolvedCombat) return null;
+    await ensureCombatantSideAssignments(resolvedCombat, { overwrite, groupByDisposition });
+    const nextState = cloneSideStateForSave(getCombatState(resolvedCombat), resolvedCombat.combatants);
+    await setCombatState(resolvedCombat, nextState);
+    return nextState;
+  },
+
   async rollSideInitiative(combat = null, { random = Math.random } = {}) {
     const resolvedCombat = getCombatFromArgument(combat);
     if (!resolvedCombat) return null;
+
+    await this.refreshCombatantSides(resolvedCombat);
 
     const state = getCombatState(resolvedCombat);
     const sideSummary = getSideSummary(resolvedCombat);
@@ -44,6 +93,8 @@ export const SideInitiativeAPI = {
       lastRolls: Object.fromEntries(rollResult.rolls.map((side) => [side.id, side.roll])),
       lastRolledRound: resolvedCombat.round,
       activeSideId: rollResult.order[0] ?? null,
+      activeSideIndex: 0,
+      activeCombatantId: null,
       sides: {
         ...state.sides
       }
@@ -72,29 +123,19 @@ export const SideInitiativeAPI = {
       await resolvedCombat.updateEmbeddedDocuments("Combatant", updates);
     }
 
-    const combatantList = getCombatantList(resolvedCombat);
-    if (combatantList.length) {
-      const firstSide = rollResult.order[0];
-      const firstCombatantId = nextState.sides[firstSide]?.combatantIds?.[0];
-      if (firstCombatantId != null) {
-        const firstIndex = combatantList.findIndex((combatant) => combatant.id === firstCombatantId);
-        if (firstIndex >= 0) {
-          await resolvedCombat.update({ turn: firstIndex, round: resolvedCombat.round });
-        }
-      }
+    const firstSide = rollResult.order[0];
+    if (firstSide) {
+      await syncCombatToSide(resolvedCombat, firstSide, { roundDelta: 0 });
     }
 
     return nextState;
   },
 
-  async assignCombatantSide(combatant, sideId) {
-    return setCombatantSide(combatant, sideId);
-  },
-
-  async markActed(combatant, round = null) {
+  async assignCombatantSide(combatant, sideId, { source = "manual" } = {}) {
     if (!combatant) return null;
-    const currentRound = round ?? combatant.parent?.round ?? game?.combat?.round ?? 0;
-    return setCombatantActedRound(combatant, currentRound);
+    await setCombatantSide(combatant, sideId);
+    await setCombatantSideSource(combatant, source);
+    return sideId;
   },
 
   async setActiveSide(combat, sideId) {
@@ -103,16 +144,28 @@ export const SideInitiativeAPI = {
     const normalizedSideId = normalizeSideId(sideId);
     const state = getCombatState(resolvedCombat);
     state.activeSideId = normalizedSideId;
-    const saved = await saveState(resolvedCombat, state);
-    const combatantIds = saved?.sides?.[normalizedSideId]?.combatantIds ?? [];
-    const targetCombatantId = combatantIds[0];
-    if (targetCombatantId != null) {
-      const index = getCombatantList(resolvedCombat).findIndex((combatant) => combatant.id === targetCombatantId);
-      if (index >= 0) {
-        await resolvedCombat.update({ turn: index });
-      }
-    }
-    return saved;
+    state.activeSideIndex = Math.max(0, getOrderedSideIds(resolvedCombat).indexOf(normalizedSideId));
+    state.activeCombatantId = getSideRepresentativeCombatant(resolvedCombat, normalizedSideId)?.id ?? null;
+    await setCombatState(resolvedCombat, cloneSideStateForSave(state, resolvedCombat.combatants));
+    await syncCombatToSide(resolvedCombat, normalizedSideId, { roundDelta: 0 });
+    return state;
+  },
+
+  async advanceSide(combat, direction = 1) {
+    const resolvedCombat = getCombatFromArgument(combat);
+    if (!resolvedCombat) return null;
+    const currentSideId = getActiveSideId(resolvedCombat);
+    const nextSideId = getNextSideId(resolvedCombat, direction);
+    if (!nextSideId) return null;
+    const ordered = getOrderedSideIds(resolvedCombat);
+    const roundDelta = getNextRoundDelta(currentSideId, nextSideId, direction, ordered);
+    const state = getCombatState(resolvedCombat);
+    state.activeSideId = nextSideId;
+    state.activeSideIndex = Math.max(0, ordered.indexOf(nextSideId));
+    state.activeCombatantId = getSideRepresentativeCombatant(resolvedCombat, nextSideId)?.id ?? null;
+    await setCombatState(resolvedCombat, cloneSideStateForSave(state, resolvedCombat.combatants));
+    await syncCombatToSide(resolvedCombat, nextSideId, { roundDelta });
+    return state;
   },
 
   getSideState(combat) {

@@ -1,31 +1,8 @@
-.side-initiative-badge {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.35rem;
-  padding: 0.1rem 0.45rem;
-  border-radius: 4px;
-  font-size: 11px;
-  line-height: 1.2;
-  font-weight: 600;
-  border: 1px solid rgba(127, 127, 127, 0.35);
-  background: rgba(0, 0, 0, 0.08);
-  color: inherit;
-}
-
-.side-initiative-badge.is-active {
-  border-color: rgba(40, 120, 255, 0.7);
-  background: rgba(40, 120, 255, 0.16);
-}
-
-.side-initiative-badge.is-acted {
-  opacity: 0.7;
-}
-
 .side-initiative-toolbar {
   display: flex;
+  justify-content: center;
   flex-wrap: wrap;
   gap: 0.35rem;
-  margin: 0.35rem 0 0.5rem;
 }
 
 .side-initiative-toolbar .control {
@@ -35,19 +12,22 @@
 }
 
 .side-initiative-panel {
-  display: grid;
-  grid-template-columns: 1fr;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
   gap: 0.35rem;
-  padding: 0.45rem 0;
+  padding: 0.4rem 0 0.5rem;
   border-top: 1px solid rgba(127, 127, 127, 0.15);
   border-bottom: 1px solid rgba(127, 127, 127, 0.15);
 }
 
-.side-initiative-panel .side-initiative-row {
+.side-initiative-track {
   display: flex;
-  flex-wrap: wrap;
   align-items: center;
+  justify-content: center;
+  flex-wrap: wrap;
   gap: 0.35rem;
+  width: 100%;
 }
 
 .side-initiative-panel .side-chip {
@@ -57,10 +37,26 @@
   padding: 0.1rem 0.45rem;
   border-radius: 4px;
   border: 1px solid rgba(127, 127, 127, 0.25);
+  background: rgba(0, 0, 0, 0.04);
+  color: inherit;
 }
 
 .side-initiative-panel .side-chip.is-current {
-  border-color: rgba(40, 120, 255, 0.75);
+  border-color: var(--side-chip-color, rgba(40, 120, 255, 0.75));
+}
+
+.side-initiative-row {
+  position: relative;
+}
+
+.side-initiative-strip {
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 4px;
+  border-radius: 2px;
+  pointer-events: none;
 }
 
 .side-initiative-editor {

@@ -1,10 +1,9 @@
 import {
-  COMBATANT_ACTED_ROUND_FLAG,
   COMBATANT_SIDE_FLAG,
+  COMBATANT_SIDE_SOURCE_FLAG,
   DEFAULT_SIDE_DATA,
   DEFAULT_SIDE_ORDER,
   FLAG_SCOPE,
-  MODULE_ID,
   SIDE_STATE_FLAG
 } from "./constants.js";
 
@@ -14,10 +13,35 @@ export function normalizeSideId(value) {
   return slug || "side";
 }
 
+export function isPlayerOwnedCombatant(combatant) {
+  return Boolean(
+    combatant?.hasPlayerOwner ||
+      combatant?.actor?.hasPlayerOwner ||
+      combatant?.token?.actor?.hasPlayerOwner ||
+      combatant?.document?.actor?.hasPlayerOwner
+  );
+}
+
+export function getCombatantDisposition(combatant) {
+  const candidates = [
+    combatant?.disposition,
+    combatant?.token?.disposition,
+    combatant?.token?.document?.disposition,
+    combatant?.token?.object?.document?.disposition,
+    combatant?.document?.disposition,
+    combatant?.actor?.prototypeToken?.disposition
+  ];
+
+  for (const value of candidates) {
+    if (Number.isFinite(Number(value))) return Number(value);
+  }
+  return 0;
+}
+
 export function defaultSideIdForCombatant(combatant) {
   if (!combatant) return "neutral";
-  if (combatant.hasPlayerOwner) return "players";
-  const disposition = Number(combatant.disposition ?? combatant.token?.disposition ?? 0);
+  if (isPlayerOwnedCombatant(combatant)) return "players";
+  const disposition = getCombatantDisposition(combatant);
   if (disposition > 0) return "allies";
   if (disposition < 0) return "monsters";
   return "neutral";
@@ -42,7 +66,9 @@ export function normalizeCombatState(raw = {}) {
     sides: raw?.sides && typeof raw.sides === "object" ? { ...raw.sides } : {},
     lastRolledRound: raw?.lastRolledRound ?? null,
     lastRolls: raw?.lastRolls && typeof raw.lastRolls === "object" ? { ...raw.lastRolls } : {},
-    activeSideId: raw?.activeSideId ? normalizeSideId(raw.activeSideId) : null
+    activeSideId: raw?.activeSideId ? normalizeSideId(raw.activeSideId) : null,
+    activeSideIndex: Number.isInteger(raw?.activeSideIndex) ? raw.activeSideIndex : null,
+    activeCombatantId: raw?.activeCombatantId ?? null
   };
 
   for (const [sideId, side] of Object.entries(state.sides)) {
@@ -88,6 +114,11 @@ export function ensureCombatState(combat, state = {}) {
   return normalized;
 }
 
+export function getCombatantSideSource(combatant) {
+  const stored = combatant?.getFlag?.(FLAG_SCOPE, COMBATANT_SIDE_SOURCE_FLAG);
+  return stored ? String(stored) : null;
+}
+
 export function hasSideMembers(combat, sideId) {
   const normalizedId = normalizeSideId(sideId);
   return getCombatantsForSide(combat, normalizedId).length > 0;
@@ -116,6 +147,30 @@ export function collectCombatantSides(combat, { groupByDisposition = true } = {}
   }
 
   return sideMap;
+}
+
+export async function ensureCombatantSideAssignments(combat, { overwrite = false, groupByDisposition = true } = {}) {
+  const combatants = Array.from(combat?.combatants ?? []);
+  const updates = [];
+
+  for (const combatant of combatants) {
+    const currentSideId = getCombatantSideId(combatant, { groupByDisposition });
+    const currentSource = getCombatantSideSource(combatant);
+    const hasExplicitSideFlag = combatant?.getFlag?.(FLAG_SCOPE, COMBATANT_SIDE_FLAG) != null;
+    const shouldUpdate = overwrite || currentSource === "auto" || (!currentSource && !hasExplicitSideFlag);
+    if (!shouldUpdate) continue;
+
+    const nextSideId = defaultSideIdForCombatant(combatant);
+    if (normalizeSideId(currentSideId) !== normalizeSideId(nextSideId) || currentSource !== "auto") {
+      updates.push(
+        combatant.setFlag?.(FLAG_SCOPE, COMBATANT_SIDE_FLAG, normalizeSideId(nextSideId)),
+        combatant.setFlag?.(FLAG_SCOPE, COMBATANT_SIDE_SOURCE_FLAG, "auto")
+      );
+    }
+  }
+
+  await Promise.all(updates.filter(Boolean));
+  return combat;
 }
 
 export function rollDie(random = Math.random) {
@@ -192,21 +247,33 @@ export function getCombatantAtTurn(combat, turn) {
 }
 
 export function getActiveSideId(combat, { groupByDisposition = true } = {}) {
+  const state = getCombatState(combat);
+  if (state.activeSideId) return state.activeSideId;
+  if (Number.isInteger(state.activeSideIndex) && state.order[state.activeSideIndex]) {
+    return state.order[state.activeSideIndex];
+  }
   const current = getCurrentCombatant(combat);
   if (current) {
     return getCombatantSideId(current, { groupByDisposition });
   }
-  const state = getCombatState(combat);
   return state.order[0] ?? null;
 }
 
-export function getCombatantActedRound(combatant) {
-  return combatant?.getFlag?.(FLAG_SCOPE, COMBATANT_ACTED_ROUND_FLAG) ?? null;
+export function getActiveSideIndex(combat, { groupByDisposition = true } = {}) {
+  const state = getCombatState(combat);
+  if (Number.isInteger(state.activeSideIndex)) {
+    return Math.max(0, Math.min(state.activeSideIndex, Math.max(state.order.length - 1, 0)));
+  }
+  const activeSideId = getActiveSideId(combat, { groupByDisposition });
+  const index = state.order.indexOf(activeSideId);
+  return index >= 0 ? index : 0;
 }
 
-export function hasCombatantActedThisRound(combatant, combat) {
-  if (!combatant || !combat) return false;
-  return getCombatantActedRound(combatant) === combat.round;
+export function getSideTone(sideId) {
+  const normalized = normalizeSideId(sideId);
+  if (normalized === "monsters") return "hostile";
+  if (normalized === "neutral") return "neutral";
+  return "friendly";
 }
 
 export function getSideSummary(combat, { groupByDisposition = true } = {}) {
@@ -222,8 +289,9 @@ export function getSideSummary(combat, { groupByDisposition = true } = {}) {
       return {
         ...side,
         combatantIds,
+        count: combatantIds.length,
         active: sideId === getActiveSideId(combat, { groupByDisposition }),
-        acted: combatantIds.every((id) => hasCombatantActedThisRound(getCombatantById(combat, id), combat))
+        tone: getSideTone(sideId)
       };
     });
 }
@@ -244,6 +312,54 @@ export function getSideLabel(sideId) {
 export function getSideColor(sideId) {
   const normalizedId = normalizeSideId(sideId);
   return DEFAULT_SIDE_DATA[normalizedId]?.color ?? "#666666";
+}
+
+export function getSideRepresentativeCombatant(combat, sideId, { groupByDisposition = true } = {}) {
+  const activeMembers = getCombatantsForSide(combat, sideId, { includeDefeated: false, groupByDisposition });
+  if (activeMembers.length) return activeMembers[0];
+  const allMembers = getCombatantsForSide(combat, sideId, { includeDefeated: true, groupByDisposition });
+  return allMembers[0] ?? null;
+}
+
+export function getCombatantTurnIndex(combat, combatantId) {
+  const list = Array.isArray(combat?.combatants)
+    ? combat.combatants
+    : Array.isArray(combat?.combatants?.contents)
+      ? combat.combatants.contents
+      : Array.from(combat?.combatants ?? []);
+  return list.findIndex((combatant) => combatant.id === combatantId);
+}
+
+export function getOrderedSideIds(combat, { groupByDisposition = true } = {}) {
+  const state = ensureCombatState(combat, getCombatState(combat));
+  const discovered = collectCombatantSides(combat, { groupByDisposition });
+  return [...new Set([...state.order, ...DEFAULT_SIDE_ORDER, ...discovered.keys()])]
+    .filter((sideId) => discovered.has(sideId) || state.sides[sideId]);
+}
+
+export function getNextSideId(combat, direction = 1, { groupByDisposition = true } = {}) {
+  const state = ensureCombatState(combat, getCombatState(combat));
+  const sideIds = getOrderedSideIds(combat, { groupByDisposition });
+  if (!sideIds.length) return null;
+
+  const currentSideId = getActiveSideId(combat, { groupByDisposition });
+  let index = sideIds.indexOf(currentSideId);
+  if (index < 0) index = 0;
+
+  const step = direction >= 0 ? 1 : -1;
+  for (let visited = 0; visited < sideIds.length; visited += 1) {
+    index = (index + step + sideIds.length) % sideIds.length;
+    const sideId = sideIds[index];
+    if (getCombatantsForSide(combat, sideId, { includeDefeated: false, groupByDisposition }).length) {
+      return sideId;
+    }
+  }
+
+  return state.order[index] ?? sideIds[index] ?? currentSideId;
+}
+
+export function getPreviousSideId(combat, options = {}) {
+  return getNextSideId(combat, -1, options);
 }
 
 export function cloneSideStateForSave(state, combatants) {
@@ -305,6 +421,6 @@ export async function setCombatantSide(combatant, sideId) {
   return combatant?.setFlag?.(FLAG_SCOPE, COMBATANT_SIDE_FLAG, normalizeSideId(sideId));
 }
 
-export async function setCombatantActedRound(combatant, round) {
-  return combatant?.setFlag?.(FLAG_SCOPE, COMBATANT_ACTED_ROUND_FLAG, round);
+export async function setCombatantSideSource(combatant, source) {
+  return combatant?.setFlag?.(FLAG_SCOPE, COMBATANT_SIDE_SOURCE_FLAG, source);
 }
