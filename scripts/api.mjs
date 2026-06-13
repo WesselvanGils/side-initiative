@@ -20,7 +20,7 @@ import {
     setCombatantSide,
     setCombatantSideSource
 } from "./logic.mjs";
-import { COMMANDER_CONTROL_OPTIONS, MODULE_ID, SETTINGS } from "./constants.mjs";
+import { COMMANDER_CONTROL_OPTIONS, MODULE_ID, SETTINGS, SOCKET_EVENT } from "./constants.mjs";
 
 /**
  * @param {object | null | undefined} combat
@@ -115,6 +115,46 @@ function canUserControlCombatant(combatant, user = game.user) {
 }
 
 /**
+ * Resolve the active GM user if one is available.
+ * @returns {object | null}
+ */
+function getActiveGMUser() {
+    return game.users?.activeGM ?? game.users?.getActiveGM?.() ?? Array.from(game.users?.contents ?? []).find((user) => user?.isGM && user?.active) ?? null;
+}
+
+/**
+ * Determine whether this client should process GM-only socket requests.
+ * @returns {boolean}
+ */
+function isActiveGMClient() {
+    const activeGM = getActiveGMUser();
+    if (activeGM) return activeGM.id === game.user?.id;
+    return Boolean(game.user?.isGM);
+}
+
+/**
+ * Handle a commander assignment socket request.
+ * @param {{ module?: string, action?: string, combatId?: string, combatantId?: string, userId?: string }} message
+ * @param {string | null} senderUserId
+ * @returns {Promise<object | null>}
+ */
+export async function handleCommanderSocketRequest(message = {}, senderUserId = null) {
+    if (message?.module !== MODULE_ID || message?.action !== "setCommander") return null;
+    if (!game.user?.isGM || !isActiveGMClient()) return null;
+
+    const combat = game.combats?.get?.(message.combatId) ?? (game.combat?.id === message.combatId ? game.combat : null);
+    if (!combat) return null;
+
+    const combatant = combat.combatants?.get?.(message.combatantId) ?? null;
+    if (!combatant) return null;
+
+    const requestingUser = game.users?.get?.(message.userId ?? senderUserId) ?? null;
+    if (!requestingUser || !canUserControlCombatant(combatant, requestingUser)) return null;
+
+    return SideInitiativeAPI.setSideCommander(combat, combatant);
+}
+
+/**
  * Side initiative API surface.
  * @type {{
  *   MODULE_ID: string,
@@ -122,6 +162,7 @@ function canUserControlCombatant(combatant, user = game.user) {
  *   rollSideInitiative(combat?: object | null, options?: { random?: () => number }): Promise<object | null>,
  *   assignCombatantSide(combatant: object | null | undefined, sideId: string, options?: { source?: string }): Promise<string | null>,
  *   setSideCommander(combat: object | null | undefined, combatant: object | null | undefined): Promise<object | null>,
+ *   requestSideCommander(combat: object | null | undefined, combatant: object | null | undefined): Promise<boolean>,
  *   getSideCommander(combat?: object | null, sideId?: string): object | null,
  *   canUserSetCommander(combatant: object | null | undefined, user?: object | null): boolean,
  *   canUserAdvanceSide(combat?: object | null, user?: object | null): boolean,
@@ -227,6 +268,31 @@ export const SideInitiativeAPI = {
         }
 
         return state;
+    },
+
+    async requestSideCommander(combat, combatant) {
+        const resolvedCombat = getCombatFromArgument(combat);
+        if (!resolvedCombat || !combatant) return false;
+
+        if (game.user?.isGM) {
+            await this.setSideCommander(resolvedCombat, combatant);
+            return true;
+        }
+
+        const activeGM = getActiveGMUser();
+        if (!activeGM || !game.socket?.emit) {
+            ui.notifications?.warn?.(game.i18n.localize("SIDE-INITIATIVE.Notifications.NoActiveGM"));
+            return false;
+        }
+
+        game.socket?.emit?.(SOCKET_EVENT, {
+            module: MODULE_ID,
+            action: "setCommander",
+            combatId: resolvedCombat.id,
+            combatantId: combatant.id,
+            userId: game.user?.id ?? null
+        });
+        return true;
     },
 
     getSideCommander(combat, sideId) {

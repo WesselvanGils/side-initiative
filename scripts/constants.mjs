@@ -10,6 +10,8 @@ export const COMBATANT_SIDE_FLAG = "sideId";
 export const COMBATANT_SIDE_SOURCE_FLAG = "sideSource";
 /** @type {string} */
 export const COMMANDER_CONTROL_SETTING = "commanderControl";
+/** @type {string} */
+export const SOCKET_EVENT = `module.${MODULE_ID}`;
 
 /** @type {{ sideOwners: string, gmOnly: string }} */
 export const COMMANDER_CONTROL_OPTIONS = {

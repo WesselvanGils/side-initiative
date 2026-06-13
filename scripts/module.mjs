@@ -1,6 +1,7 @@
-import { COMMANDER_CONTROL_OPTIONS, MODULE_ID, SETTINGS } from "./constants.mjs";
+import { COMMANDER_CONTROL_OPTIONS, MODULE_ID, SETTINGS, SOCKET_EVENT } from "./constants.mjs";
 import { SideInitiativeAPI } from "./api.mjs";
 import { installCombatPatches } from "./combat-controller.mjs";
+import { handleCommanderSocketRequest } from "./api.mjs";
 import { registerGambitsPremadesIntegration } from "./integration/gambits-premades.mjs";
 import { registerMidiQolIntegration } from "./integration/midi-qol.mjs";
 import { addCombatantContextOptions, renderCombatTracker } from "./ui/tracker.mjs";
@@ -95,6 +96,7 @@ Hooks.once("init", () => {
 });
 
 Hooks.once("ready", () => {
+    game.socket?.on?.(SOCKET_EVENT, handleCommanderSocketRequest);
     if (game.combat) {
         game.sideInitiative?.refreshCombatantSides?.(game.combat);
     }

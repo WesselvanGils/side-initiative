@@ -1,5 +1,5 @@
 import { SETTINGS } from "../constants.mjs";
-import { getActiveSideId, getCombatantSideId, getSideSummary, normalizeSideId } from "../logic.mjs";
+import { getActiveSideId, getCombatantSideId, getSideRepresentativeCombatant, getSideSummary, normalizeSideId } from "../logic.mjs";
 import { openSideEditor } from "./side-editor.mjs";
 
 /**
@@ -117,7 +117,7 @@ function createCommanderControl(app, combat, combatant) {
     const button = document.createElement("button");
     const label = game.i18n.localize("SIDE-INITIATIVE.UI.MakeCommander");
     const sideId = getCombatantSideId(combatant);
-    const isCommander = Boolean(sideId && game.sideInitiative?.getSideCommander?.(combat, sideId)?.id === combatant.id);
+    const isCommander = Boolean(sideId && getSideRepresentativeCombatant(combat, sideId)?.id === combatant.id);
 
     button.type = "button";
     button.className = "control inline-control combatant-control icon fa-solid fa-crown side-initiative-commander-control";
@@ -133,8 +133,10 @@ function createCommanderControl(app, combat, combatant) {
         event.preventDefault();
         event.stopPropagation?.();
         if (isCommander) return;
-        await game.sideInitiative?.setSideCommander?.(combat, combatant);
-        app.render?.();
+        const requested = await game.sideInitiative?.requestSideCommander?.(combat, combatant);
+        if (requested && game.user?.isGM) {
+            app.render?.();
+        }
     });
 
     return button;
@@ -192,8 +194,10 @@ export function addCombatantContextOptions(app, menuItems) {
         callback: async (li) => {
             const combatant = getCombatantForRow(app, li);
             if (!combatant) return;
-            await game.sideInitiative?.setSideCommander?.(combat, combatant);
-            app.render?.();
+            const requested = await game.sideInitiative?.requestSideCommander?.(combat, combatant);
+            if (requested && game.user?.isGM) {
+                app.render?.();
+            }
         }
     });
 }
@@ -205,21 +209,22 @@ export function addCombatantContextOptions(app, menuItems) {
  * @returns {void}
  */
 export function renderCombatTracker(app, html) {
-    if (!game.user?.isGM && !game.user?.can?.("COMBAT_TRACKER")) return;
-    if (!game.settings.get("side-initiative", SETTINGS.showTrackerControls)) return;
-
     const combat = getTrackerCombat(app);
     const root = getRoot(html);
     if (!combat || !root) return;
+
+    const canViewTrackerControls = Boolean(game.user?.isGM || game.user?.can?.("COMBAT_TRACKER"));
+    const showTrackerControls = canViewTrackerControls && game.settings.get("side-initiative", SETTINGS.showTrackerControls);
 
     root.querySelector(".side-initiative-panel")?.remove();
 
     const sides = getSideSummary(combat);
     const activeSideId = getActiveSideId(combat);
 
-    const panel = document.createElement("section");
-    panel.className = "side-initiative-panel";
-    panel.innerHTML = `
+    if (showTrackerControls) {
+        const panel = document.createElement("section");
+        panel.className = "side-initiative-panel";
+        panel.innerHTML = `
     <div class="side-initiative-toolbar">
       ${iconButton(game.i18n.localize("SIDE-INITIATIVE.UI.RollSideInitiative"), "fas fa-dice-d20", { action: "roll-side-init" })}
       ${iconButton(game.i18n.localize("SIDE-INITIATIVE.UI.EditSides"), "fas fa-pen-to-square", { action: "edit-sides" })}
@@ -228,16 +233,18 @@ export function renderCombatTracker(app, html) {
       ${sides.length ? sides.map((side) => renderSideChip(side, activeSideId)).join("") : `<span class="side-chip is-current">${game.i18n.localize("SIDE-INITIATIVE.UI.NoSides")}</span>`}
     </div>
   `;
-    root.prepend(panel);
+        root.prepend(panel);
+
+        panel.querySelector('[data-action="roll-side-init"]')?.addEventListener("click", async () => {
+            await game.sideInitiative.rollSideInitiative(combat);
+            ui.notifications.info(game.i18n.localize("SIDE-INITIATIVE.Notifications.SideRolled"));
+            app.render?.();
+        });
+
+        panel.querySelector('[data-action="edit-sides"]')?.addEventListener("click", () => openSideEditor(combat));
+    }
+
     bindCombatTrackerRowData(app, html);
-
-    panel.querySelector('[data-action="roll-side-init"]')?.addEventListener("click", async () => {
-        await game.sideInitiative.rollSideInitiative(combat);
-        ui.notifications.info(game.i18n.localize("SIDE-INITIATIVE.Notifications.SideRolled"));
-        app.render?.();
-    });
-
-    panel.querySelector('[data-action="edit-sides"]')?.addEventListener("click", () => openSideEditor(combat));
 
     for (const row of root.querySelectorAll(".combatant")) {
         const combatantId = row.dataset.combatantId;

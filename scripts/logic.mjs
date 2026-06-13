@@ -256,6 +256,7 @@ export function getCombatantSideSource(combatant) {
  * @returns {CombatantLike[]}
  */
 function getCombatTurnEntries(combat) {
+    if (combat instanceof Map) return Array.from(combat.values());
     const turns = combat?.turns;
     if (Array.isArray(turns)) return turns;
     if (Array.isArray(turns?.contents)) return turns.contents;
@@ -274,6 +275,7 @@ function getCombatTurnEntries(combat) {
  * @returns {CombatantLike[]}
  */
 function getCombatantEntries(source) {
+    if (source instanceof Map) return Array.from(source.values());
     if (Array.isArray(source)) return source;
     const combatants = source?.combatants;
     if (Array.isArray(combatants?.contents)) return combatants.contents;

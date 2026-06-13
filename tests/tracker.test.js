@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { renderCombatTracker } from "../scripts/ui/tracker.mjs";
+import { SOCKET_EVENT } from "../scripts/constants.mjs";
 
 function createClassList(owner) {
     const values = new Set();
@@ -141,6 +142,7 @@ function createCombatant({ id, sideId, owner = false }) {
 
 function createCombat(combatants, commanderIds = {}) {
     return {
+        id: "combat-1",
         combatants: new Map(combatants.map((combatant) => [combatant.id, combatant])),
         getFlag(scope, key) {
             if (scope === "side-initiative" && key === "state") {
@@ -159,7 +161,15 @@ function createCombat(combatants, commanderIds = {}) {
     };
 }
 
-function installGlobals({ combat, user, can = true, commanderMap }) {
+function installGlobals({
+    combat,
+    user,
+    canSetCommander = true,
+    canViewTrackerControls = true,
+    commanderMap,
+    socket = null,
+    users = null
+}) {
     const original = {
         document: globalThis.document,
         game: globalThis.game
@@ -171,9 +181,17 @@ function installGlobals({ combat, user, can = true, commanderMap }) {
     globalThis.game = {
         combat,
         user,
+        socket,
+        users: users ?? {
+            activeGM: { id: "gm-1", isGM: true, active: true },
+            get() {
+                return null;
+            },
+            contents: []
+        },
         settings: {
             get(namespace, key) {
-                if (namespace === "side-initiative" && key === "showTrackerControls") return true;
+                if (namespace === "side-initiative" && key === "showTrackerControls") return canViewTrackerControls;
                 return null;
             }
         },
@@ -184,7 +202,7 @@ function installGlobals({ combat, user, can = true, commanderMap }) {
         },
         sideInitiative: {
             canUserSetCommander() {
-                return can;
+                return canSetCommander;
             },
             getSideCommander(_combat, sideId) {
                 const commanderId = commanderMap.get(sideId) ?? null;
@@ -193,6 +211,21 @@ function installGlobals({ combat, user, can = true, commanderMap }) {
             setSideCommander(_combat, combatant) {
                 commanderMap.set(combatant.getFlag("side-initiative", "sideId"), combatant.id);
                 return Promise.resolve(combatant);
+            },
+            async requestSideCommander(_combat, combatant) {
+                if (user?.isGM) {
+                    await this.setSideCommander(_combat, combatant);
+                    return true;
+                }
+                if (!socket?.emit) return false;
+                socket.emit("module.side-initiative", {
+                    module: "side-initiative",
+                    action: "setCommander",
+                    combatId: combat.id,
+                    combatantId: combatant.id,
+                    userId: user?.id ?? null
+                });
+                return true;
             }
         }
     };
@@ -240,8 +273,9 @@ test("renderCombatTracker adds commander buttons for eligible rows across sides"
     const root = createTrackerRoot(rows);
     const env = installGlobals({
         combat,
-        user: { id: "gm-1", isGM: true, can: () => true },
-        can: true,
+        user: { id: "user-1", isGM: false, can: () => false },
+        canSetCommander: true,
+        canViewTrackerControls: false,
         commanderMap: new Map([["players", "pc-2"], ["monsters", "npc-1"]])
     });
 
@@ -255,6 +289,7 @@ test("renderCombatTracker adds commander buttons for eligible rows across sides"
         assert.ok(rows[0].commanderButton);
         assert.ok(rows[1].commanderButton);
         assert.ok(rows[2].commanderButton);
+        assert.equal(root.panel, null);
 
         assert.equal(rows[0].commanderButton.classList.contains("active"), false);
         assert.equal(rows[1].commanderButton.classList.contains("active"), true);
@@ -286,7 +321,8 @@ test("renderCombatTracker commander button updates the commander and rerenders",
     const env = installGlobals({
         combat,
         user: { id: "gm-1", isGM: true, can: () => true },
-        can: true,
+        canSetCommander: true,
+        canViewTrackerControls: true,
         commanderMap
     });
 
@@ -308,6 +344,66 @@ test("renderCombatTracker commander button updates the commander and rerenders",
     }
 });
 
+test("renderCombatTracker commander button requests a socket change for players", async () => {
+    const combatants = [
+        createCombatant({ id: "pc-1", sideId: "players", owner: true }),
+        createCombatant({ id: "pc-2", sideId: "players", owner: true })
+    ];
+    const combat = createCombat(combatants, {
+        players: "pc-1"
+    });
+    const row = createTrackerRow("pc-2");
+    const app = {
+        viewed: combat,
+        renderCalls: 0,
+        render() {
+            this.renderCalls += 1;
+        }
+    };
+    const root = createTrackerRoot([row]);
+    const emitted = [];
+    const env = installGlobals({
+        combat,
+        user: { id: "user-1", isGM: false, can: () => false },
+        canSetCommander: true,
+        canViewTrackerControls: false,
+        commanderMap: new Map([["players", "pc-1"]]),
+        socket: {
+            emit(event, payload) {
+                emitted.push({ event, payload });
+            }
+        }
+    });
+
+    try {
+        renderCombatTracker(app, [root]);
+
+        assert.ok(row.commanderButton);
+        assert.equal(row.commanderButton.classList.contains("active"), false);
+
+        await row.commanderButton.listeners.click({
+            preventDefault() {},
+            stopPropagation() {}
+        });
+
+        assert.deepEqual(emitted, [
+            {
+                event: SOCKET_EVENT,
+                payload: {
+                    module: "side-initiative",
+                    action: "setCommander",
+                    combatId: "combat-1",
+                    combatantId: "pc-2",
+                    userId: "user-1"
+                }
+            }
+        ]);
+        assert.equal(app.renderCalls, 0);
+    } finally {
+        env.restore();
+    }
+});
+
 test("renderCombatTracker omits commander buttons when the user cannot set them", () => {
     const combatants = [
         createCombatant({ id: "pc-1", sideId: "players", owner: false })
@@ -318,7 +414,8 @@ test("renderCombatTracker omits commander buttons when the user cannot set them"
     const env = installGlobals({
         combat,
         user: { id: "user-1", isGM: false, can: () => true },
-        can: false,
+        canSetCommander: false,
+        canViewTrackerControls: false,
         commanderMap: new Map()
     });
 
