@@ -17,5 +17,7 @@
     "SIDE-INITIATIVE.UI.CurrentTurn": "Current turn",
     "SIDE-INITIATIVE.Notifications.SideRolled": "Side initiative rolled.",
     "SIDE-INITIATIVE.Notifications.EditorSaved": "Side assignments saved.",
-    "SIDE-INITIATIVE.Notifications.GambitsOpportunityAttackIncompatible": "Gambits Premades Opportunity Attack is enabled, but it is not side-aware. Disable it when using Side Initiative."
+    "SIDE-INITIATIVE.Notifications.GambitsOpportunityAttackIncompatible": "Gambits Premades Opportunity Attack is enabled, but it is not side-aware. Disable it when using Side Initiative.",
+    "SIDE-INITIATIVE.Notifications.GambitsOpportunityAttackUnsupportedVersion": "Gambits Premades Opportunity Attack integration is disabled because the installed version ({version}) is not supported. Supported version: {supported}.",
+    "SIDE-INITIATIVE.Notifications.GambitsOpportunityAttackSourceMismatch": "Gambits Premades Opportunity Attack integration is disabled because the installed source no longer matches the supported shape."
 }

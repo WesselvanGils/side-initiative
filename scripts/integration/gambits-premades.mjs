@@ -1,40 +1,187 @@
-const warnedCombatIds = new Set();
+const SUPPORTED_GAMBITS_PREMADES_VERSION = "2.1.43";
+const SUPPORTED_OPPORTUNITY_ATTACK_SOURCE_MARKERS = [
+    "canvas.tokens.get(game.combat?.current.tokenId)",
+    "currentCombatant?.id !== token.object.id",
+    "not tokens turn in combat"
+];
 
-/**
- * Determine whether Gambits Premades opportunity attacks are enabled.
- * @returns {boolean}
- */
-function isGambitsOpportunityAttackEnabled() {
-    return Boolean(
-        game.modules.get("gambits-premades")?.active &&
-        game.settings.get("gambits-premades", "Enable Opportunity Attack")
-    );
+const integrationState = {
+    status: "inactive",
+    version: null,
+    reason: null,
+    originalOpportunityAttackScenarios: null,
+    patchedOpportunityAttackScenarios: null,
+    warnedKeys: new Set()
+};
+
+function getGambitsModule() {
+    return game.modules.get("gambits-premades") ?? null;
 }
 
 /**
- * Determine whether the current setup should warn about Gambits opportunity attacks.
- * @param {object | null | undefined} combat
- * @returns {boolean}
+ * Read the installed Gambits Premades version.
+ * @returns {string | null}
  */
-export function shouldWarnAboutGambitsOpportunityAttack(combat = game.combat) {
-    if (!game.user?.isGM) return false;
-    if (!combat?.started) return false;
-    if (!isGambitsOpportunityAttackEnabled()) return false;
-    return Boolean(game.sideInitiative?.isSideCombat?.(combat));
+export function getGambitsPremadesVersion() {
+    return getGambitsModule()?.version ?? getGambitsModule()?.data?.version ?? null;
 }
 
 /**
- * Show the Gambits compatibility warning once per combat.
- * @param {object | null | undefined} combat
+ * Determine whether the installed Gambits Premades version is supported.
+ * @param {string | null | undefined} [version]
  * @returns {boolean}
  */
-export function warnAboutGambitsOpportunityAttack(combat = game.combat) {
-    if (!shouldWarnAboutGambitsOpportunityAttack(combat)) return false;
-    const combatId = combat?.id ?? null;
-    if (!combatId || warnedCombatIds.has(combatId)) return false;
+export function isSupportedGambitsPremadesVersion(version = getGambitsPremadesVersion()) {
+    return String(version ?? "") === SUPPORTED_GAMBITS_PREMADES_VERSION;
+}
 
-    warnedCombatIds.add(combatId);
-    ui.notifications.warn(game.i18n.localize("SIDE-INITIATIVE.Notifications.GambitsOpportunityAttackIncompatible"));
+/**
+ * Validate that the installed Gambits AOO function still matches the expected source shape.
+ * @param {Function | null | undefined} fn
+ * @returns {boolean}
+ */
+export function validateGambitsOpportunityAttackSource(fn) {
+    if (typeof fn !== "function") return false;
+    const source = Function.prototype.toString.call(fn);
+    return SUPPORTED_OPPORTUNITY_ATTACK_SOURCE_MARKERS.every((marker) => source.includes(marker));
+}
+
+/**
+ * Return the current integration state for tests and diagnostics.
+ * @returns {{ status: string, version: string | null, reason: string | null }}
+ */
+export function getGambitsPremadesIntegrationState() {
+    return {
+        status: integrationState.status,
+        version: integrationState.version,
+        reason: integrationState.reason
+    };
+}
+
+/**
+ * Reset the internal integration state.
+ * @returns {void}
+ */
+export function resetGambitsPremadesIntegrationState() {
+    integrationState.status = "inactive";
+    integrationState.version = null;
+    integrationState.reason = null;
+    integrationState.originalOpportunityAttackScenarios = null;
+    integrationState.patchedOpportunityAttackScenarios = null;
+    integrationState.warnedKeys.clear();
+}
+
+function warnOnce(key, message) {
+    if (integrationState.warnedKeys.has(key)) return;
+    integrationState.warnedKeys.add(key);
+    ui.notifications.warn(message);
+}
+
+function restoreOriginalOpportunityAttackScenarios() {
+    if (!integrationState.originalOpportunityAttackScenarios) return;
+    if (game.gps?.opportunityAttackScenarios === integrationState.patchedOpportunityAttackScenarios) {
+        game.gps.opportunityAttackScenarios = integrationState.originalOpportunityAttackScenarios;
+    }
+}
+
+function disableIntegration(status, reason, warningKey = null, warningMessage = null) {
+    restoreOriginalOpportunityAttackScenarios();
+    integrationState.status = status;
+    integrationState.reason = reason;
+
+    if (warningKey && warningMessage) {
+        warnOnce(warningKey, warningMessage);
+    }
+}
+
+function createPatchedOpportunityAttackScenarios(original) {
+    return async function patchedOpportunityAttackScenarios(payload) {
+        const tokenUuid = payload?.tokenUuid;
+        const combat = game.combat ?? null;
+        const token = tokenUuid ? await fromUuid(tokenUuid) : null;
+
+        if (!combat || !token?.object?.id) {
+            return original.call(this, payload);
+        }
+
+        const currentTokenId = combat.current?.tokenId;
+        const tokenObjectId = token.object.id;
+        const bypassGuard = Boolean(
+            currentTokenId &&
+            currentTokenId !== tokenObjectId &&
+            game.sideInitiative?.isTokenOnActiveSide?.(token, combat)
+        );
+
+        if (!bypassGuard) {
+            return original.call(this, payload);
+        }
+
+        const canvasTokens = canvas?.tokens;
+        if (!canvasTokens?.get) {
+            return original.call(this, payload);
+        }
+
+        const originalGet = canvasTokens.get;
+        canvasTokens.get = function patchedGet(id, ...rest) {
+            if (id === currentTokenId) {
+                return token.object ?? token;
+            }
+            return originalGet.call(this, id, ...rest);
+        };
+
+        try {
+            return await original.call(this, payload);
+        } catch (error) {
+            throw error;
+        } finally {
+            canvasTokens.get = originalGet;
+        }
+    };
+}
+
+function tryPatchGambitsOpportunityAttack() {
+    const gps = game.gps;
+    if (!getGambitsModule()?.active || !gps) return false;
+
+    if (
+        integrationState.status === "patched" &&
+        gps.opportunityAttackScenarios === integrationState.patchedOpportunityAttackScenarios
+    ) {
+        return true;
+    }
+
+    const version = getGambitsPremadesVersion();
+    integrationState.version = version;
+
+    if (!isSupportedGambitsPremadesVersion(version)) {
+        disableIntegration(
+            "unsupported",
+            `Gambits Premades Opportunity Attack integration is disabled because version ${version ?? "unknown"} is not supported.`,
+            "unsupported-version",
+            game.i18n.format("SIDE-INITIATIVE.Notifications.GambitsOpportunityAttackUnsupportedVersion", {
+                version: version ?? "unknown",
+                supported: SUPPORTED_GAMBITS_PREMADES_VERSION
+            })
+        );
+        return false;
+    }
+
+    const original = gps.opportunityAttackScenarios;
+    if (!validateGambitsOpportunityAttackSource(original)) {
+        disableIntegration(
+            "unsupported",
+            "Gambits Premades Opportunity Attack integration is disabled because the installed source no longer matches the supported shape.",
+            "source-mismatch",
+            game.i18n.localize("SIDE-INITIATIVE.Notifications.GambitsOpportunityAttackSourceMismatch")
+        );
+        return false;
+    }
+
+    integrationState.originalOpportunityAttackScenarios = original;
+    integrationState.patchedOpportunityAttackScenarios = createPatchedOpportunityAttackScenarios(original);
+    gps.opportunityAttackScenarios = integrationState.patchedOpportunityAttackScenarios;
+    integrationState.status = "patched";
+    integrationState.reason = null;
     return true;
 }
 
@@ -43,27 +190,11 @@ export function warnAboutGambitsOpportunityAttack(combat = game.combat) {
  * @returns {void}
  */
 export function registerGambitsPremadesIntegration() {
-    if (!game.modules.get("gambits-premades")?.active) return;
+    if (!getGambitsModule()?.active) return;
 
-    Hooks.on("createCombat", (combat) => {
-        warnAboutGambitsOpportunityAttack(combat);
-    });
+    if (tryPatchGambitsOpportunityAttack()) return;
 
-    Hooks.on("updateCombat", (combat, changed) => {
-        if (changed?.started) {
-            warnAboutGambitsOpportunityAttack(combat);
-        }
-    });
-
-    Hooks.on("updateSetting", (setting) => {
-        if (setting?.config?.namespace === "gambits-premades" && setting?.config?.key === "Enable Opportunity Attack") {
-            warnAboutGambitsOpportunityAttack(game.combat);
-        }
-    });
-
-    Hooks.on("deleteCombat", (combat) => {
-        if (combat?.id) warnedCombatIds.delete(combat.id);
-    });
-
-    warnAboutGambitsOpportunityAttack(game.combat);
+    if (integrationState.status !== "patched") {
+        Hooks.once("socketlib.ready", tryPatchGambitsOpportunityAttack);
+    }
 }
