@@ -47,13 +47,37 @@ function renderSideChip(side, currentSideId) {
 }
 
 /**
+ * Resolve the display side for a combatant or combatant group row.
  * @param {object} combat
- * @param {string} combatantId
+ * @param {object | null | undefined} combatant
+ * @param {string | null} [groupId]
  * @returns {{ id: string, name: string, color: string, combatantIds: string[] } | null}
  */
-function resolveCombatantSide(combat, combatantId) {
+function resolveDisplaySide(combat, combatant, groupId = null) {
     const sides = getSideSummary(combat);
-    return sides.find((side) => side.combatantIds.includes(combatantId)) ?? null;
+    const sideById = new Map(sides.map((side) => [side.id, side]));
+
+    const members = [];
+    if (groupId && combat?.groups?.get) {
+        const group = combat.groups.get(groupId);
+        if (group?.members?.size) members.push(...group.members);
+    } else if (combatant?.group?.members?.size) {
+        members.push(...combatant.group.members);
+    }
+
+    if (members.length > 1) {
+        const counts = new Map();
+        for (const member of members) {
+            const sideId = getCombatantSideId(member);
+            counts.set(sideId, (counts.get(sideId) ?? 0) + 1);
+        }
+        const [bestSideId] = [...counts.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))[0] ?? [];
+        if (bestSideId && sideById.has(bestSideId)) return sideById.get(bestSideId);
+    }
+
+    const combatantId = combatant?.id ?? null;
+    if (combatantId) return sides.find((side) => side.combatantIds.includes(combatantId)) ?? null;
+    return null;
 }
 
 /**
@@ -80,18 +104,6 @@ function injectSideStrip(row, side) {
  * @param {unknown} html
  * @returns {void}
  */
-function bindCombatTrackerRowData(app, html) {
-    const root = getRoot(html);
-    if (!root) return;
-    const rows = Array.from(root.querySelectorAll(".combatant"));
-    const combatants = Array.from(app?.viewed?.combatants ?? app?.combat?.combatants ?? []);
-    for (const [index, row] of rows.entries()) {
-        if (!row.dataset.combatantId && combatants[index]) {
-            row.dataset.combatantId = combatants[index].id;
-        }
-    }
-}
-
 /**
  * Resolve a combatant for a tracker row.
  * @param {object} app
@@ -100,8 +112,15 @@ function bindCombatTrackerRowData(app, html) {
  */
 function getCombatantForRow(app, row) {
     const combatantId = row?.dataset?.combatantId;
-    if (!combatantId) return null;
-    return app?.viewed?.combatants?.get?.(combatantId) ?? app?.combat?.combatants?.get?.(combatantId) ?? null;
+    if (combatantId) {
+        return app?.viewed?.combatants?.get?.(combatantId) ?? app?.combat?.combatants?.get?.(combatantId) ?? null;
+    }
+
+    const groupId = row?.dataset?.groupId ?? row?.dataset?.combatantGroupId ?? null;
+    if (!groupId) return null;
+    const group = app?.viewed?.groups?.get?.(groupId) ?? app?.combat?.groups?.get?.(groupId) ?? null;
+    if (!group?.members?.size) return null;
+    return group.members.values().next().value ?? null;
 }
 
 /**
@@ -244,12 +263,10 @@ export function renderCombatTracker(app, html) {
         panel.querySelector('[data-action="edit-sides"]')?.addEventListener("click", () => openSideEditor(combat));
     }
 
-    bindCombatTrackerRowData(app, html);
-
     for (const row of root.querySelectorAll(".combatant")) {
-        const combatantId = row.dataset.combatantId;
-        if (!combatantId) continue;
-        const side = resolveCombatantSide(combat, combatantId);
+        const combatant = getCombatantForRow(app, row);
+        const groupId = row.dataset.groupId ?? row.dataset.combatantGroupId ?? null;
+        const side = resolveDisplaySide(combat, combatant, groupId);
         if (!side) continue;
         injectSideStrip(row, side);
         addCommanderControl(app, row, combat);

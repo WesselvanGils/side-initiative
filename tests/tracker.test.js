@@ -300,6 +300,36 @@ test("renderCombatTracker adds commander buttons for eligible rows across sides"
     }
 });
 
+test("renderCombatTracker uses group member sides for collapsed group rows", () => {
+    const groupLeader = createCombatant({ id: "group-1", sideId: "players", owner: true });
+    const monsterOne = createCombatant({ id: "npc-1", sideId: "monsters", owner: true });
+    const monsterTwo = createCombatant({ id: "npc-2", sideId: "monsters", owner: true });
+    groupLeader.group = { members: new Set([monsterOne, monsterTwo]) };
+
+    const combat = createCombat([groupLeader, monsterOne, monsterTwo], {
+        players: "group-1",
+        monsters: "npc-1"
+    });
+    const row = createTrackerRow("group-1");
+    const root = createTrackerRoot([row]);
+    const env = installGlobals({
+        combat,
+        user: { id: "user-1", isGM: false, can: () => false },
+        canSetCommander: true,
+        canViewTrackerControls: false,
+        commanderMap: new Map([["players", "group-1"], ["monsters", "npc-1"]])
+    });
+
+    try {
+        renderCombatTracker({ viewed: combat }, [root]);
+
+        assert.ok(row.sideStrip);
+        assert.equal(row.sideStrip.style.backgroundColor, "#b93a3a");
+    } finally {
+        env.restore();
+    }
+});
+
 test("renderCombatTracker commander button updates the commander and rerenders", async () => {
     const combatants = [
         createCombatant({ id: "pc-1", sideId: "players", owner: true }),

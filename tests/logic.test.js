@@ -444,6 +444,90 @@ test("SideInitiativeAPI rolls and advances by side", async () => {
     assert.equal(combat.round, 2);
 });
 
+test("SideInitiativeAPI.rollSideInitiative creates visible roll messages", async () => {
+    const combatants = [
+        createCombatant({ id: "pc-1", hasPlayerOwner: true, disposition: 1 }),
+        createCombatant({ id: "npc-1", hasPlayerOwner: false, disposition: -1 })
+    ];
+    const combat = createCombat(
+        combatants,
+        {
+            order: ["players", "monsters"],
+            sides: {
+                players: { id: "players", combatantIds: ["pc-1"] },
+                monsters: { id: "monsters", combatantIds: ["npc-1"] }
+            }
+        },
+        combatants
+    );
+
+    const messages = [];
+    const originalFoundry = globalThis.foundry;
+    const originalChatMessage = globalThis.ChatMessage;
+    const originalGame = globalThis.game;
+
+    globalThis.foundry = {
+        dice: {
+            Roll: {
+                create() {
+                    const total = [17, 9][messages.length];
+                    return {
+                        total,
+                        async evaluate() {
+                            return this;
+                        },
+                        async toMessage(data) {
+                            messages.push({ total: this.total, ...data });
+                            return this;
+                        }
+                    };
+                }
+            }
+        },
+        documents: {
+            ChatMessage: {
+                implementation: {
+                    getSpeaker({ alias }) {
+                        return { alias };
+                    }
+                }
+            }
+        }
+    };
+    globalThis.ChatMessage = globalThis.foundry.documents.ChatMessage;
+    globalThis.game = {
+        user: { id: "gm-1", isGM: true },
+        settings: {
+            get(namespace, key) {
+                if (namespace === "side-initiative" && key === "initiativeMethod") return "side-d20";
+                if (namespace === "core" && key === "rollMode") return "publicroll";
+                return null;
+            }
+        },
+        i18n: {
+            format(key, data) {
+                return `${key}:${data.name}`;
+            }
+        }
+    };
+
+    try {
+        const state = await SideInitiativeAPI.rollSideInitiative(combat, { random: () => 0.5 });
+
+        assert.equal(messages.length, 2);
+        assert.deepEqual(messages.map((entry) => entry.total), [17, 9]);
+        assert.deepEqual(messages.map((entry) => entry.speaker.alias), ["Players", "Monsters"]);
+        assert.equal(combatants[0].initiative, 17);
+        assert.equal(combatants[1].initiative, 9);
+        assert.equal(state.order[0], "players");
+        assert.equal(getActiveSideId(combat), "players");
+    } finally {
+        globalThis.foundry = originalFoundry;
+        globalThis.ChatMessage = originalChatMessage;
+        globalThis.game = originalGame;
+    }
+});
+
 test("SideInitiativeAPI.rollWeightedSideInitiative applies weighted averages to all combatants", async () => {
     const combatants = [
         createCombatant({ id: "pc-1", hasPlayerOwner: true, disposition: 1, sideId: "players", initiativeTotal: 10 }),
@@ -451,6 +535,10 @@ test("SideInitiativeAPI.rollWeightedSideInitiative applies weighted averages to 
         createCombatant({ id: "lich", hasPlayerOwner: false, disposition: -1, sideId: "monsters", actorXp: 3900, initiativeTotal: 8 }),
         createCombatant({ id: "goblin", hasPlayerOwner: false, disposition: -1, sideId: "monsters", actorXp: 50, initiativeTotal: 18 })
     ];
+    combatants[0].initiative = 10;
+    combatants[1].initiative = 12;
+    combatants[2].initiative = 8;
+    combatants[3].initiative = 18;
     const combat = createCombat(
         combatants,
         {

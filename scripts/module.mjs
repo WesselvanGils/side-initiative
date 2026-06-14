@@ -57,6 +57,16 @@ function registerSettings() {
 }
 
 /**
+ * Determine whether this client should perform GM-only combat mutations.
+ * @returns {boolean}
+ */
+function isActiveGMClient() {
+    const activeGM = game.users?.activeGM ?? game.users?.getActiveGM?.() ?? Array.from(game.users?.contents ?? []).find((user) => user?.isGM && user?.active) ?? null;
+    if (activeGM) return activeGM.id === game.user?.id;
+    return Boolean(game.user?.isGM);
+}
+
+/**
  * Handle combat updates that start a new encounter.
  * @param {object} combat
  * @param {object} changed
@@ -64,6 +74,7 @@ function registerSettings() {
  */
 export async function handleCombatStartedUpdate(combat, changed) {
     if (!changed?.started) return;
+    if (!isActiveGMClient()) return;
 
     await game.sideInitiative?.refreshCombatantSides?.(combat);
 
@@ -111,6 +122,7 @@ function registerHooks() {
     Hooks.on("renderCombatTracker", renderCombatTracker);
     Hooks.on("getCombatantContextOptions", addCombatantContextOptions);
     Hooks.on("createCombat", async (combat) => {
+        if (!isActiveGMClient()) return;
         await game.sideInitiative?.refreshCombatantSides?.(combat);
     });
     Hooks.on("updateCombat", handleCombatStartedUpdate);

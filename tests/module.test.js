@@ -27,6 +27,14 @@ async function loadModuleUnderTest(game) {
 test("handleCombatStartedUpdate rolls weighted initiative when enabled", async () => {
     const calls = [];
     const { module, restore } = await loadModuleUnderTest({
+        users: {
+            activeGM: { id: "gm-1", isGM: true, active: true },
+            get() {
+                return null;
+            },
+            contents: []
+        },
+        user: { id: "gm-1", isGM: true },
         settings: {
             get(namespace, key) {
                 if (namespace === "side-initiative" && key === "initiativeMethod") {
@@ -61,6 +69,14 @@ test("handleCombatStartedUpdate rolls weighted initiative when enabled", async (
 test("handleCombatStartedUpdate skips weighted rolling when the mode is side d20", async () => {
     const calls = [];
     const { module, restore } = await loadModuleUnderTest({
+        users: {
+            activeGM: { id: "gm-1", isGM: true, active: true },
+            get() {
+                return null;
+            },
+            contents: []
+        },
+        user: { id: "gm-1", isGM: true },
         settings: {
             get(namespace, key) {
                 if (namespace === "side-initiative" && key === "initiativeMethod") {

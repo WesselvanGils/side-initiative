@@ -15,7 +15,6 @@ import {
     isSideCombat,
     isTokenOnActiveSide,
     normalizeSideId,
-    rollSideInitiativeData,
     rollWeightedSideInitiativeData,
     setCombatState,
     setCombatantSide,
@@ -95,6 +94,45 @@ function getCombatantEntries(combat) {
 }
 
 /**
+ * Resolve the Roll class if Foundry provides it.
+ * @returns {typeof import("../foundry/client/dice/roll.mjs").default | null}
+ */
+function getRollClass() {
+    return globalThis.foundry?.dice?.Roll ?? null;
+}
+
+/**
+ * Roll a single visible d20 for a side.
+ * @param {object} side
+ * @param {object} [options]
+ * @returns {Promise<{ roll: number, tieBreaker: number }>}
+ */
+async function rollVisibleSideDie(side, options = {}) {
+    const Roll = getRollClass();
+    const rollMode = options.rollMode ?? globalThis.game?.settings?.get?.("core", "rollMode");
+    const random = options.random ?? Math.random;
+
+    if (!Roll?.create) {
+        return {
+            roll: Math.floor(random() * 20) + 1,
+            tieBreaker: random()
+        };
+    }
+
+    const roll = Roll.create("1d20");
+    await roll.evaluate({ allowInteractive: rollMode !== globalThis.CONST?.DICE_ROLL_MODES?.BLIND });
+    const speaker = globalThis.foundry?.documents?.ChatMessage?.implementation?.getSpeaker?.({ alias: side.name })
+        ?? { alias: side.name };
+    const flavor = globalThis.game?.i18n?.format?.("COMBAT.RollsInitiative", { name: side.name })
+        ?? `${side.name} initiative`;
+    await roll.toMessage({ speaker, flavor }, { rollMode });
+    return {
+        roll: Number.isFinite(roll.total) ? roll.total : 0,
+        tieBreaker: random()
+    };
+}
+
+/**
  * Roll side initiative using one d20 per side.
  * @param {object} resolvedCombat
  * @param {{ random?: () => number }} [options]
@@ -103,15 +141,46 @@ function getCombatantEntries(combat) {
 async function rollStandardSideInitiative(resolvedCombat, { random = Math.random } = {}) {
     await SideInitiativeAPI.refreshCombatantSides(resolvedCombat);
 
-    const state = getCombatState(resolvedCombat);
     const sideSummary = getSideSummary(resolvedCombat);
-    const rollResult = rollSideInitiativeData(sideSummary, random);
+    const rolls = [];
+    for (const side of sideSummary) {
+        rolls.push({
+            ...side,
+            ...(await rollVisibleSideDie(side, { rollMode: globalThis.game?.settings?.get?.("core", "rollMode"), random }))
+        });
+    }
+
+    let attempts = 0;
+    while (attempts < 50) {
+        const groups = new Map();
+        for (const entry of rolls) {
+            const key = entry.roll;
+            if (!groups.has(key)) groups.set(key, []);
+            groups.get(key).push(entry);
+        }
+        const tiedGroups = [...groups.values()].filter((group) => group.length > 1);
+        if (!tiedGroups.length) break;
+        for (const group of tiedGroups) {
+            for (const side of group) {
+                Object.assign(side, await rollVisibleSideDie(side, { rollMode: globalThis.game?.settings?.get?.("core", "rollMode"), random }));
+            }
+        }
+        attempts += 1;
+    }
+
+    const ordered = [...rolls].sort((a, b) => {
+        if (b.roll !== a.roll) return b.roll - a.roll;
+        if (b.tieBreaker !== a.tieBreaker) return b.tieBreaker - a.tieBreaker;
+        return a.id.localeCompare(b.id);
+    });
+
+    const state = getCombatState(resolvedCombat);
     const nextState = {
         ...state,
-        order: rollResult.order,
-        lastRolls: Object.fromEntries(rollResult.rolls.map((side) => [side.id, side.roll])),
+        order: ordered.map((side) => side.id),
+        lastRolls: Object.fromEntries(rolls.map((side) => [side.id, side.roll])),
         lastRolledRound: resolvedCombat.round,
-        activeSideId: rollResult.order[0] ?? null,
+        activeSideId: ordered[0]?.id ?? null,
         activeSideIndex: 0,
         activeCombatantId: null,
         sides: {
@@ -119,7 +188,7 @@ async function rollStandardSideInitiative(resolvedCombat, { random = Math.random
         }
     };
 
-    for (const side of rollResult.rolls) {
+    for (const side of rolls) {
         nextState.sides[side.id] = {
             ...(nextState.sides[side.id] ?? side),
             ...side,
@@ -130,7 +199,7 @@ async function rollStandardSideInitiative(resolvedCombat, { random = Math.random
     await saveState(resolvedCombat, nextState);
 
     const updates = [];
-    for (const side of rollResult.rolls) {
+    for (const side of rolls) {
         for (const combatantId of side.combatantIds ?? []) {
             updates.push({
                 _id: combatantId,
@@ -142,7 +211,7 @@ async function rollStandardSideInitiative(resolvedCombat, { random = Math.random
         await resolvedCombat.updateEmbeddedDocuments("Combatant", updates);
     }
 
-    const firstSide = rollResult.order[0];
+    const firstSide = ordered[0]?.id;
     if (firstSide) {
         await syncCombatToSide(resolvedCombat, firstSide, { roundDelta: 0 });
     }
@@ -161,23 +230,26 @@ async function rollWeightedSideInitiative(resolvedCombat, { random = Math.random
         await SideInitiativeAPI.refreshCombatantSides(resolvedCombat);
     }
 
+    if (globalThis.game?.user?.isGM) {
+        const missing = getCombatantEntries(resolvedCombat).filter((combatant) => combatant?.id && !Number.isFinite(combatant.initiative));
+        if (missing.length) {
+            if (typeof resolvedCombat.rollAll === "function") {
+                await resolvedCombat.rollAll({ updateTurn: false });
+            } else if (typeof resolvedCombat.rollInitiative === "function") {
+                await resolvedCombat.rollInitiative(missing.map((combatant) => combatant.id), { updateTurn: false });
+            }
+        }
+    }
+
     const combatants = getCombatantEntries(resolvedCombat);
     const initiativeByCombatantId = {};
     const weightByCombatantId = {};
 
-    await Promise.all(combatants.map(async (combatant) => {
-        if (!combatant?.id) return;
-        const roll = combatant?.getInitiativeRoll?.();
-        if (!roll) {
-            initiativeByCombatantId[combatant.id] = 0;
-            weightByCombatantId[combatant.id] = getCombatantInitiativeWeight(combatant);
-            return;
-        }
-
-        await roll.evaluate();
-        initiativeByCombatantId[combatant.id] = Number.isFinite(roll.total) ? roll.total : 0;
+    for (const combatant of combatants) {
+        if (!combatant?.id) continue;
+        initiativeByCombatantId[combatant.id] = Number.isFinite(combatant.initiative) ? combatant.initiative : 0;
         weightByCombatantId[combatant.id] = getCombatantInitiativeWeight(combatant);
-    }));
+    }
 
     const state = getCombatState(resolvedCombat);
     const sideSummary = getSideSummary(resolvedCombat);
