@@ -5,7 +5,10 @@
   "scripts": {
     "test": "node --test tests/*.test.js",
     "createSymlinks": "node ./tools/create-symlinks.mjs",
-    "postinstall": "npm run createSymlinks"
+    "postinstall": "npm run createSymlinks",
+    "log::regenerate": "conventional-changelog -p conventionalcommits -i CHANGELOG.md -s -r 0",
+    "log::update": "npx conventional-changelog -p conventionalcommits -i CHANGELOG.md -s"
+
   },
   "devDependencies": {
     "conventional-changelog-cli": "^5.0.0",
