@@ -1,17 +1,14 @@
 {
-  "name": "side-initiative",
-  "private": true,
-  "type": "module",
-  "scripts": {
-    "test": "node --test tests/*.test.js",
-    "createSymlinks": "node ./tools/create-symlinks.mjs",
-    "postinstall": "npm run createSymlinks",
-    "log::regenerate": "conventional-changelog -p conventionalcommits -i CHANGELOG.md -s -r 0",
-    "log::update": "npx conventional-changelog -p conventionalcommits -i CHANGELOG.md -s"
-
-  },
-  "devDependencies": {
-    "conventional-changelog-cli": "^5.0.0",
-    "js-yaml": "^4.2.0"
-  }
+    "name": "side-initiative",
+    "private": true,
+    "type": "module",
+    "scripts": {
+        "test": "node --test tests/*.test.js",
+        "createSymlinks": "node ./tools/create-symlinks.mjs",
+        "postinstall": "npm run createSymlinks",
+        "changelog": "git-cliff -o CHANGELOG.md"
+    },
+    "devDependencies": {
+        "js-yaml": "^4.2.0"
+    }
 }
