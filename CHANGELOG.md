@@ -1,7 +1,12 @@
 ## [unreleased]
 
+### 🐛 Bug Fixes
+
+- CI/CD again
+
 ### 📚 Documentation
 
+- *(changelog)* Update changelog
 - *(changelog)* Update changelog
 ## [1.0.6] - 2026-06-14
 
