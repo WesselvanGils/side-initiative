@@ -53,7 +53,14 @@ async function resetReactionUsed(actor) {
     if (!actor) return;
 
     const reactionEffectId = "dnd5ereaction000";
-    await actor.effects?.get?.(reactionEffectId)?.delete?.();
+    try {
+        await actor.effects?.get?.(reactionEffectId)?.delete?.();
+    } catch (error) {
+        const message = String(error?.message ?? error ?? "");
+        if (!message.includes(reactionEffectId) && !message.includes("does not exist")) {
+            throw error;
+        }
+    }
     await actor.update?.({
         flags: {
             "midi-qol": {
@@ -86,7 +93,11 @@ async function resetReactionsForSide(combat, sideId) {
     }
 
     for (const actor of actors.values()) {
-        await resetReactionUsed(actor);
+        try {
+            await resetReactionUsed(actor);
+        } catch (error) {
+            console.warn("side-initiative | Failed to clear MidiQOL reaction state", actor, error);
+        }
     }
 }
 
