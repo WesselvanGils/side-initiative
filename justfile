@@ -7,8 +7,6 @@ release version:
       exit 1
     }
 
-    git tag "{{version}}"
-
     git-cliff -o CHANGELOG.md
     git add CHANGELOG.md
 
@@ -16,4 +14,6 @@ release version:
       git commit -m "docs(changelog): update changelog"
     fi
 
-    git push origin main "{{version}}"
+    git tag "{{version}}"
+
+    git push origin main "{{version}}"commit

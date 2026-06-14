@@ -120,13 +120,13 @@ async function stageReleaseBundle({ rootDir, outDir, tag }) {
     }
 
     return {
-    releaseRoot,
-    zipPath,
-    manifestPath: join(releaseRoot, "module.json"),
-    releaseNotesPath: join(outDir, "release-notes.md"),
-    tagName,
-    version,
-    repositoryBaseUrl
+        releaseRoot,
+        zipPath,
+        manifestPath: join(releaseRoot, "module.json"),
+        releaseNotesPath: join(outDir, "release-notes.md"),
+        tagName,
+        version,
+        repositoryBaseUrl
     };
 }
 
