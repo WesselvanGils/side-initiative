@@ -1,8 +1,17 @@
 ## [unreleased]
 
+### 🚀 Features
+
+- Proper automatic releases through Github actions
+## [1.0.2] - 2026-06-14
+
 ### 🐛 Bug Fixes
 
 - Resolved an issue where the package download link would be incorrect
+
+### 📚 Documentation
+
+- *(changelog)* Update changelog
 ## [1.0.1] - 2026-06-14
 
 ### 🚀 Features
