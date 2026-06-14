@@ -1,5 +1,7 @@
 import {
+    getCombatState,
     getCombatantsForSide,
+    getSideCommanderId,
     isActorOnActiveSide
 } from "../logic.mjs";
 
@@ -80,11 +82,26 @@ function isPrimaryGMClient() {
     return isActiveGMClient();
 }
 
+function getCommanderCombatantIds(combat, sideId) {
+    const ids = new Set();
+    const commanderId = getSideCommanderId(combat, sideId);
+    if (commanderId) ids.add(commanderId);
+
+    const state = getCombatState(combat);
+    if (state.activeSideId === sideId && state.activeCombatantId) {
+        ids.add(state.activeCombatantId);
+    }
+
+    return ids;
+}
+
 async function resetReactionsForSide(combat, sideId) {
     if (!combat?.started || !sideId) return;
 
     const actors = new Map();
+    const commanderCombatantIds = getCommanderCombatantIds(combat, sideId);
     for (const combatant of getCombatantsForSide(combat, sideId, { includeDefeated: false })) {
+        if (commanderCombatantIds.has(combatant?.id)) continue;
         for (const actor of collectCombatantActors(combatant)) {
             const key = getActorKey(actor, combatant);
             if (!actor || !key || actors.has(key)) continue;

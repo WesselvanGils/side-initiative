@@ -338,6 +338,57 @@ test("MidiQOL continues clearing side reactions when one actor has a stale react
     }
 });
 
+test("MidiQOL skips the side commander because the active combatant reset is handled by MidiQOL", async () => {
+    const deletes = [];
+    const updates = [];
+    const commanderActor = createReactionActor({
+        id: "commander",
+        deletes,
+        updates,
+        deleteError: new Error('ActiveEffect "dnd5ereaction000" does not exist!')
+    });
+    const memberActor = createReactionActor({ id: "member", deletes, updates });
+    const combat = {
+        started: true,
+        combatants: [
+            createCombatant({ id: "npc-commander", sideId: "monsters", actor: commanderActor }),
+            createCombatant({ id: "npc-member", sideId: "monsters", actor: memberActor })
+        ],
+        getFlag(scope, key) {
+            if (scope === "side-initiative" && key === "state") {
+                return {
+                    activeSideId: "monsters",
+                    activeCombatantId: "npc-commander",
+                    order: ["players", "monsters"],
+                    sides: {
+                        players: { id: "players", combatantIds: [] },
+                        monsters: { id: "monsters", combatantIds: ["npc-commander", "npc-member"] }
+                    },
+                    commanderIds: {
+                        monsters: "npc-commander"
+                    }
+                };
+            }
+            return null;
+        }
+    };
+
+    const env = installGlobals({ combat });
+    try {
+        registerMidiQolIntegration();
+
+        const [sideTurnStart] = env.hooks.get("side-initiative.sideTurnStart");
+        await sideTurnStart({ combat, sideId: "monsters" });
+
+        assert.deepEqual(deletes, [
+            { actorUuid: "member-uuid", effectId: "dnd5ereaction000" }
+        ]);
+        assert.deepEqual(updates.map((entry) => entry.actorUuid), ["member-uuid"]);
+    } finally {
+        env.restore();
+    }
+});
+
 test("MidiQOL clears a single used reaction effect when the API is unavailable", async () => {
     const deletes = [];
     const updates = [];
