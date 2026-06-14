@@ -369,7 +369,7 @@ test("advanceSide uses the combat turn order when it differs from combatant orde
     assert.equal(getActiveSideId(combat), "players");
 });
 
-test("advanceSide emits side turn lifecycle hooks", async () => {
+test("advanceSide emits side turn lifecycle hooks and setActiveSide does not re-emit them for the current side", async () => {
     const p1 = createCombatant({ id: "pc-1", hasPlayerOwner: true, disposition: 1 });
     const m1 = createCombatant({ id: "npc-1", hasPlayerOwner: false, disposition: -1 });
     const combat = createCombat(
@@ -387,35 +387,53 @@ test("advanceSide emits side turn lifecycle hooks", async () => {
 
     const events = [];
     const originalHooks = globalThis.Hooks;
+    const originalSetFlag = combat.setFlag.bind(combat);
+    const originalUpdate = combat.update.bind(combat);
     globalThis.Hooks = {
         callAll(name, payload) {
             events.push({ name, payload });
         }
     };
+    combat.setFlag = async function setFlag(scope, key, value) {
+        if (scope === "side-initiative" && key === "state") {
+            events.push({ name: "combat.setFlag", value });
+        }
+        return originalSetFlag(scope, key, value);
+    };
+    combat.update = async function update(data) {
+        events.push({ name: "combat.update", data });
+        return originalUpdate(data);
+    };
 
     try {
+        await SideInitiativeAPI.setActiveSide(combat, "players");
+        assert.equal(events.some((event) => event.name === "side-initiative.sideTurnEnd" || event.name === "side-initiative.sideTurnStart"), false);
+
+        events.length = 0;
         await SideInitiativeAPI.advanceSide(combat, 1);
 
-        assert.deepEqual(events, [
-            {
-                name: "side-initiative.sideTurnEnd",
-                payload: {
-                    combat,
-                    sideId: "players",
-                    nextSideId: "monsters"
-                }
-            },
-            {
-                name: "side-initiative.sideTurnStart",
-                payload: {
-                    combat,
-                    sideId: "monsters",
-                    previousSideId: "players"
-                }
+        assert.deepEqual(events[0], {
+            name: "side-initiative.sideTurnEnd",
+            payload: {
+                combat,
+                sideId: "players",
+                nextSideId: "monsters"
             }
-        ]);
+        });
+        assert.deepEqual(events.at(-1), {
+            name: "side-initiative.sideTurnStart",
+            payload: {
+                combat,
+                sideId: "monsters",
+                previousSideId: "players"
+            }
+        });
+        assert.ok(events.some((event) => event.name === "combat.setFlag"));
+        assert.ok(events.some((event) => event.name === "combat.update"));
     } finally {
         globalThis.Hooks = originalHooks;
+        combat.setFlag = originalSetFlag;
+        combat.update = originalUpdate;
     }
 });
 

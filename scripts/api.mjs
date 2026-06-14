@@ -80,26 +80,34 @@ async function syncCombatToSide(combat, sideId, { roundDelta = 0 } = {}) {
 }
 
 /**
- * Emit side turn lifecycle hooks after a side transition completes.
+ * Emit a side turn end hook.
  * @param {object | null | undefined} combat
- * @param {string | null | undefined} previousSideId
+ * @param {string | null | undefined} sideId
  * @param {string | null | undefined} nextSideId
  * @returns {void}
  */
-function emitSideTurnHooks(combat, previousSideId, nextSideId) {
-    const normalizedPreviousSideId = previousSideId ? normalizeSideId(previousSideId) : null;
-    const normalizedNextSideId = nextSideId ? normalizeSideId(nextSideId) : null;
-    if (normalizedPreviousSideId === normalizedNextSideId) return;
-
+function emitSideTurnEndHook(combat, sideId, nextSideId) {
+    if (!sideId) return;
     globalThis.Hooks?.callAll?.("side-initiative.sideTurnEnd", {
         combat,
-        sideId: normalizedPreviousSideId,
-        nextSideId: normalizedNextSideId
+        sideId: normalizeSideId(sideId),
+        nextSideId: nextSideId ? normalizeSideId(nextSideId) : null
     });
+}
+
+/**
+ * Emit a side turn start hook.
+ * @param {object | null | undefined} combat
+ * @param {string | null | undefined} sideId
+ * @param {string | null | undefined} previousSideId
+ * @returns {void}
+ */
+function emitSideTurnStartHook(combat, sideId, previousSideId) {
+    if (!sideId) return;
     globalThis.Hooks?.callAll?.("side-initiative.sideTurnStart", {
         combat,
-        sideId: normalizedNextSideId,
-        previousSideId: normalizedPreviousSideId
+        sideId: normalizeSideId(sideId),
+        previousSideId: previousSideId ? normalizeSideId(previousSideId) : null
     });
 }
 
@@ -530,13 +538,24 @@ export const SideInitiativeAPI = {
         if (!resolvedCombat) return null;
         const normalizedSideId = normalizeSideId(sideId);
         const previousSideId = getActiveSideId(resolvedCombat);
+        if (previousSideId === normalizedSideId) {
+            const state = getCombatState(resolvedCombat);
+            state.activeSideId = normalizedSideId;
+            state.activeSideIndex = Math.max(0, getOrderedSideIds(resolvedCombat).indexOf(normalizedSideId));
+            state.activeCombatantId = getSideRepresentativeCombatant(resolvedCombat, normalizedSideId)?.id ?? null;
+            await setCombatState(resolvedCombat, cloneSideStateForSave(state, resolvedCombat.combatants));
+            await syncCombatToSide(resolvedCombat, normalizedSideId, { roundDelta: 0 });
+            return state;
+        }
+
+        emitSideTurnEndHook(resolvedCombat, previousSideId, normalizedSideId);
         const state = getCombatState(resolvedCombat);
         state.activeSideId = normalizedSideId;
         state.activeSideIndex = Math.max(0, getOrderedSideIds(resolvedCombat).indexOf(normalizedSideId));
         state.activeCombatantId = getSideRepresentativeCombatant(resolvedCombat, normalizedSideId)?.id ?? null;
         await setCombatState(resolvedCombat, cloneSideStateForSave(state, resolvedCombat.combatants));
         await syncCombatToSide(resolvedCombat, normalizedSideId, { roundDelta: 0 });
-        emitSideTurnHooks(resolvedCombat, previousSideId, normalizedSideId);
+        emitSideTurnStartHook(resolvedCombat, normalizedSideId, previousSideId);
         return state;
     },
 
@@ -548,13 +567,14 @@ export const SideInitiativeAPI = {
         if (!nextSideId) return null;
         const ordered = getOrderedSideIds(resolvedCombat);
         const roundDelta = getNextRoundDelta(currentSideId, nextSideId, direction, ordered);
+        emitSideTurnEndHook(resolvedCombat, currentSideId, nextSideId);
         const state = getCombatState(resolvedCombat);
         state.activeSideId = nextSideId;
         state.activeSideIndex = Math.max(0, ordered.indexOf(nextSideId));
         state.activeCombatantId = getSideRepresentativeCombatant(resolvedCombat, nextSideId)?.id ?? null;
         await setCombatState(resolvedCombat, cloneSideStateForSave(state, resolvedCombat.combatants));
         await syncCombatToSide(resolvedCombat, nextSideId, { roundDelta });
-        emitSideTurnHooks(resolvedCombat, currentSideId, nextSideId);
+        emitSideTurnStartHook(resolvedCombat, nextSideId, currentSideId);
         return state;
     },
 

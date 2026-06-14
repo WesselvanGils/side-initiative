@@ -3,37 +3,32 @@ import {
     isActorOnActiveSide
 } from "../logic.mjs";
 
-function getReactionResetUpdates(actor) {
-    const updates = {};
-    const reaction = actor?.system?.attributes?.reaction;
+function getMidiQolApi() {
+    return globalThis.MidiQOL ?? globalThis.midiQOL ?? null;
+}
 
-    if (reaction && typeof reaction === "object") {
-        if (Object.hasOwn(reaction, "used")) {
-            updates["system.attributes.reaction.used"] = false;
-        }
-        if (Object.hasOwn(reaction, "value")) {
-            if (typeof reaction.value === "boolean") {
-                updates["system.attributes.reaction.value"] = true;
-            } else if (Number.isFinite(Number(reaction.max))) {
-                updates["system.attributes.reaction.value"] = Number(reaction.max);
-            } else if (Number.isFinite(Number(reaction.value))) {
-                updates["system.attributes.reaction.value"] = 1;
-            }
-        }
-    }
+function isActiveGMClient() {
+    const activeGM = game.users?.activeGM ?? game.users?.getActiveGM?.() ?? Array.from(game.users?.contents ?? []).find((user) => user?.isGM && user?.active) ?? null;
+    if (activeGM) return activeGM.id === game.user?.id;
+    return Boolean(game.user?.isGM);
+}
 
-    if (actor?.flags?.["midi-qol"] && Object.hasOwn(actor.flags["midi-qol"], "reactionUsed")) {
-        updates["flags.midi-qol.reactionUsed"] = false;
-    }
-
-    return updates;
+function getActorKey(actor, combatant) {
+    return actor?.id ?? actor?.uuid ?? combatant?.id ?? null;
 }
 
 async function resetReactionUsed(actor) {
     if (!actor) return;
-    const updates = getReactionResetUpdates(actor);
-    if (!Object.keys(updates).length) return;
-    await actor.update?.(updates);
+    const midiQol = getMidiQolApi();
+
+    if (typeof midiQol?.setReactionUsed === "function") {
+        await midiQol.setReactionUsed(actor, false);
+        return;
+    }
+
+    if (typeof midiQol?.removeReactionUsed === "function") {
+        await midiQol.removeReactionUsed(actor, true);
+    }
 }
 
 async function resetReactionsForSide(combat, sideId) {
@@ -42,9 +37,8 @@ async function resetReactionsForSide(combat, sideId) {
     const actors = new Map();
     for (const combatant of getCombatantsForSide(combat, sideId, { includeDefeated: false })) {
         const actor = combatant?.actor ?? combatant?.document?.actor ?? null;
-        if (!actor?.id && !actor) continue;
-        const key = actor.id ?? combatant.id;
-        if (actors.has(key)) continue;
+        const key = getActorKey(actor, combatant);
+        if (!actor || !key || actors.has(key)) continue;
         actors.set(key, actor);
     }
 
@@ -58,12 +52,13 @@ async function resetReactionsForSide(combat, sideId) {
  * @returns {void}
  */
 export function registerMidiQolIntegration() {
-    Hooks.on("midi-qol.preSetReactionUsed", async (actor) => {
+    Hooks.on("midi-qol.preSetReactionUsed", (actor) => {
         if (!actor) return true;
         return !isActorOnActiveSide(actor, game.combat);
     });
 
     Hooks.on("side-initiative.sideTurnStart", async ({ combat, sideId } = {}) => {
+        if (!game.user?.isGM || !isActiveGMClient()) return;
         await resetReactionsForSide(combat, sideId);
     });
 }

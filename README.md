@@ -26,11 +26,13 @@ Commander changes default to side owners and can be restricted to the GM in the 
 ## MidiQOL notes
 
 - This module uses `midi-qol.preSetReactionUsed` to suppress reaction consumption for actors on the active side.
+- Used reactions are cleared again when a side becomes active so characters regain reaction access on their next turn.
 
 ## Gambits Premades notes
 
-- Side Initiative patches Gambits Premades Opportunity Attack at runtime for the supported Gambits version `2.1.43`.
+- Side Initiative patches Gambits Premades Opportunity Attack at runtime for the supported Gambits versions `2.1.43`.
 - The patch is guarded: if the installed Gambits version or source shape does not match the supported build, integration is disabled internally and the GM is warned.
+- Side-turn hooks are bridged to Gambits region turn events for every combatant on the active side, not just the commander.
 - The active side's tokens keep their OA region enabled while their side is active so the side can still make opportunity attacks during that phase.
 - If you use side initiative, keep Gambits Premades Opportunity Attack disabled only when the compatibility warning reports an unsupported Gambits build.
 

@@ -43,10 +43,27 @@ function createOriginalOpportunityAttackScenarios() {
     };
 }
 
+function createHooks() {
+    const registry = new Map();
+    return {
+        on(name, handler) {
+            if (!registry.has(name)) registry.set(name, []);
+            registry.get(name).push(handler);
+        },
+        once(name, handler) {
+            if (!registry.has(name)) registry.set(name, []);
+            registry.get(name).push(handler);
+        },
+        get(name) {
+            return registry.get(name) ?? [];
+        }
+    };
+}
+
 function installGlobals({
-    version = "2.1.43",
+    version = "2.1.42",
     active = true,
-    supportedBySide = new Set(["active-token"]),
+    supportedBySide = new Set(["active-commander", "active-member"]),
     currentTokenId = "current-token"
 } = {}) {
     const original = {
@@ -58,51 +75,93 @@ function installGlobals({
     };
 
     const warnings = [];
-    const tokens = new Map([
-        ["current-token", { id: "current-token", object: { id: "current-token" }, actor: { type: "npc" } }],
-        ["active-token", { id: "active-token", object: { id: "active-token" }, actor: { type: "npc" } }],
-        ["offside-token", { id: "offside-token", object: { id: "offside-token" }, actor: { type: "npc" } }]
-    ]);
-    const regionUpdates = [];
-    const regions = new Map([
-        [
-            "region-1",
+    const turnEvents = [];
+    const tokens = new Map();
+    const scene = { id: "scene-1", regions: new Map() };
+    const combatants = [];
+
+    function createToken(id) {
+        const token = {
+            id,
+            uuid: id,
+            object: { id },
+            parent: scene,
+            scene,
+            testInsideRegion(region) {
+                return region.tokenIds.has(id);
+            }
+        };
+        tokens.set(id, token);
+        return token;
+    }
+
+    createToken("current-token");
+    createToken("active-commander");
+    createToken("active-member");
+    createToken("offside-token");
+
+    function createCombatant(id, sideId, tokenId) {
+        const combatant = {
+            id,
+            actor: { id: `${id}-actor` },
+            token: tokens.get(tokenId),
+            getFlag(scope, key) {
+                if (scope === "side-initiative" && key === "sideId") return sideId;
+                return null;
+            }
+        };
+        combatants.push(combatant);
+        return combatant;
+    }
+
+    createCombatant("combatant-commander", "players", "active-commander");
+    createCombatant("combatant-member", "players", "active-member");
+    createCombatant("combatant-offside", "monsters", "offside-token");
+
+    const region = {
+        id: "region-1",
+        uuid: "region-1",
+        tokenIds: new Set(["active-commander", "active-member"]),
+        flags: {
+            "gambits-premades": {
+                actorUuid: "active-commander",
+                tokenUuid: "active-commander"
+            }
+        },
+        behaviors: [
             {
-                id: "region-1",
-                uuid: "region-1",
-                flags: {
-                    "gambits-premades": {
-                        actorUuid: "active-token",
-                        tokenUuid: "active-token"
-                    }
-                },
-                behaviors: [
-                    {
-                        name: "onExit",
-                        update(data) {
-                            regionUpdates.push({ behavior: "onExit", ...data });
-                            return Promise.resolve(data);
-                        }
-                    },
-                    {
-                        name: "onEnter",
-                        update(data) {
-                            regionUpdates.push({ behavior: "onEnter", ...data });
-                            return Promise.resolve(data);
-                        }
-                    }
-                ],
-                getFlag(scope, key) {
-                    if (scope === "gambits-premades" && key === "regionDisabled") return false;
-                    return null;
+                name: "onExit",
+                update(data) {
+                    return Promise.resolve(data);
+                }
+            },
+            {
+                name: "onEnter",
+                update(data) {
+                    return Promise.resolve(data);
                 }
             }
-        ]
-    ]);
+        ],
+        async _triggerEvent(eventName, payload) {
+            turnEvents.push({
+                eventName,
+                regionId: this.id,
+                tokenId: payload?.token?.id ?? payload?.data?.token?.id ?? null
+            });
+        },
+        getFlag(scope, key) {
+            if (scope === "gambits-premades" && key === "regionDisabled") return false;
+            return null;
+        }
+    };
+    scene.regions.set(region.id, region);
 
     globalThis.game = {
-        user: { isGM: true },
-        combat: { current: { tokenId: currentTokenId }, started: true },
+        user: { isGM: true, id: "gm-1" },
+        users: {
+            activeGM: { id: "gm-1", isGM: true, active: true }
+        },
+        combat: { current: { tokenId: currentTokenId }, started: true, combatants },
         modules: {
             get(moduleId) {
                 if (moduleId === "gambits-premades") {
@@ -118,7 +177,7 @@ function installGlobals({
         },
         sideInitiative: {
             isTokenOnActiveSide(token) {
-                return supportedBySide.has(token?.object?.id);
+                return supportedBySide.has(token?.object?.id ?? token?.id);
             }
         },
         gps: {
@@ -142,23 +201,22 @@ function installGlobals({
         }
     };
     globalThis.canvas = {
+        scene,
         tokens: {
             get(id) {
                 return tokens.get(id) ?? null;
             }
         }
     };
-    globalThis.fromUuid = async (uuid) => tokens.get(uuid) ?? regions.get(uuid) ?? null;
-    globalThis.Hooks = {
-        once() {},
-        on() {}
-    };
+    globalThis.fromUuid = async (uuid) => tokens.get(uuid) ?? scene.regions.get(uuid) ?? null;
+    globalThis.Hooks = createHooks();
 
     return {
+        Hooks: globalThis.Hooks,
         warnings,
+        turnEvents,
+        region,
         tokens,
-        regions,
-        regionUpdates,
         restore() {
             globalThis.game = original.game;
             globalThis.ui = original.ui;
@@ -170,11 +228,12 @@ function installGlobals({
     };
 }
 
-test("Gambits helpers recognize the supported version and source shape", () => {
+test("Gambits helpers recognize the supported versions and source shape", () => {
     const env = installGlobals();
     try {
-        assert.equal(getGambitsPremadesVersion(), "2.1.43");
-        assert.equal(isSupportedGambitsPremadesVersion(), true);
+        assert.equal(getGambitsPremadesVersion(), "2.1.42");
+        assert.equal(isSupportedGambitsPremadesVersion("2.1.42"), true);
+        assert.equal(isSupportedGambitsPremadesVersion("2.1.43"), true);
         assert.equal(validateGambitsOpportunityAttackSource(game.gps.opportunityAttackScenarios), true);
     } finally {
         env.restore();
@@ -191,7 +250,7 @@ test("Gambits integration patches the active-side bypass and preserves the origi
         assert.notEqual(game.gps.opportunityAttackScenarios, original);
 
         const activeSideResult = await game.gps.opportunityAttackScenarios({
-            tokenUuid: "active-token",
+            tokenUuid: "active-commander",
             regionUuid: "region-1",
             regionScenario: "onExit"
         });
@@ -214,42 +273,22 @@ test("Gambits integration patches the active-side bypass and preserves the origi
     }
 });
 
-test("Gambits integration keeps an active-side token's OA region enabled on turn start", async () => {
+test("Gambits integration bridges side turn hooks to every token on the side", async () => {
     const env = installGlobals();
     try {
         registerGambitsPremadesIntegration();
 
-        const result = await game.gps.opportunityAttackScenarios({
-            tokenUuid: "active-token",
-            regionUuid: "region-1",
-            regionScenario: "onTurnStart"
-        });
+        const [sideTurnEnd] = globalThis.Hooks.get("side-initiative.sideTurnEnd");
+        const [sideTurnStart] = globalThis.Hooks.get("side-initiative.sideTurnStart");
 
-        assert.equal(result, undefined);
-        assert.deepEqual(env.regionUpdates, [
-            { behavior: "onExit", disabled: false },
-            { behavior: "onEnter", disabled: false }
-        ]);
-    } finally {
-        env.restore();
-    }
-});
+        await sideTurnEnd({ combat: game.combat, sideId: "players" });
+        await sideTurnStart({ combat: game.combat, sideId: "players" });
 
-test("Gambits integration keeps an active-side token's OA region enabled on turn end", async () => {
-    const env = installGlobals();
-    try {
-        registerGambitsPremadesIntegration();
-
-        const result = await game.gps.opportunityAttackScenarios({
-            tokenUuid: "active-token",
-            regionUuid: "region-1",
-            regionScenario: "onTurnEnd"
-        });
-
-        assert.equal(result, undefined);
-        assert.deepEqual(env.regionUpdates, [
-            { behavior: "onExit", disabled: false },
-            { behavior: "onEnter", disabled: false }
+        assert.deepEqual(env.turnEvents, [
+            { eventName: "tokenTurnEnd", regionId: "region-1", tokenId: "active-commander" },
+            { eventName: "tokenTurnEnd", regionId: "region-1", tokenId: "active-member" },
+            { eventName: "tokenTurnStart", regionId: "region-1", tokenId: "active-commander" },
+            { eventName: "tokenTurnStart", regionId: "region-1", tokenId: "active-member" }
         ]);
     } finally {
         env.restore();
@@ -266,7 +305,7 @@ test("Gambits integration disables itself on unsupported versions", () => {
         assert.equal(state.status, "unsupported");
         assert.equal(game.gps.opportunityAttackScenarios, original);
         assert.equal(env.warnings.length, 1);
-        assert.match(env.warnings[0], /2\.1\.44/);
+        assert.match(env.warnings[0], /2\.1\.42 or 2\.1\.43/);
     } finally {
         env.restore();
     }
