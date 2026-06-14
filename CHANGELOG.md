@@ -1,5 +1,10 @@
 ## [unreleased]
 
+### 🐛 Bug Fixes
+
+- Resolved an issue where the package download link would be incorrect
+## [1.0.1] - 2026-06-14
+
 ### 🚀 Features
 
 - Added automatic tags with changelog via just
@@ -12,6 +17,7 @@
 
 - Moved git-cliff to a pre-push hook
 - Committed changelog
+- *(changelog)* Update changelog
 ## [1.0.0] - 2026-06-14
 
 ### 🚀 Features
