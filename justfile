@@ -16,4 +16,4 @@ release version:
 
     git tag "{{version}}"
 
-    git push origin main "{{version}}"commit
+    git push origin main "{{version}}"

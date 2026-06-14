@@ -49,14 +49,9 @@ function buildReleaseManifest(sourceManifest, { tagName, version, repositoryBase
     };
 }
 
-function extractChangelogReleaseNotes(changelogText, version) {
-    const lines = String(changelogText ?? "").split(/\r?\n/);
-    const headingPrefix = `## [${version}]`;
+function extractChangelogSection(lines, headingPrefix) {
     const startIndex = lines.findIndex((line) => line.startsWith(headingPrefix));
-
-    if (startIndex === -1) {
-        throw new Error(`Could not find changelog section for version ${version}.`);
-    }
+    if (startIndex === -1) return null;
 
     let endIndex = lines.length;
     for (let index = startIndex + 1; index < lines.length; index += 1) {
@@ -66,12 +61,24 @@ function extractChangelogReleaseNotes(changelogText, version) {
         }
     }
 
-    const section = lines.slice(startIndex, endIndex).join("\n").trim();
-    if (!section) {
-        throw new Error(`Changelog section for version ${version} was empty.`);
+    return lines.slice(startIndex, endIndex).join("\n").trim();
+}
+
+function extractChangelogReleaseNotes(changelogText, version) {
+    const lines = String(changelogText ?? "").split(/\r?\n/);
+    const releaseSection = extractChangelogSection(lines, `## [${version}]`);
+
+    if (releaseSection) {
+        return `${releaseSection}\n`;
     }
 
-    return `${section}\n`;
+    const unreleasedSection = extractChangelogSection(lines, "## [unreleased]");
+    if (unreleasedSection) {
+        const releaseNotes = unreleasedSection.replace(/^## \[unreleased\].*$/m, `## [${version}]`);
+        return `${releaseNotes.trim()}\n`;
+    }
+
+    return `## [${version}]\n\nNo changelog entry was found for this release.\n`;
 }
 
 async function stageReleaseBundle({ rootDir, outDir, tag }) {

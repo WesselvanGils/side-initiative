@@ -73,3 +73,30 @@ test("extractChangelogReleaseNotes returns the matching changelog section", () =
     assert.match(notes, /Added automatic tags with changelog via just/);
     assert.doesNotMatch(notes, /1\.0\.0/);
 });
+
+test("extractChangelogReleaseNotes falls back to unreleased notes", () => {
+    const changelog = `
+## [unreleased]
+
+### 🐛 Bug Fixes
+
+- Added manual run to Github action
+
+## [1.0.3] - 2026-06-14
+
+### 🚀 Features
+
+- Proper automatic releases through Github actions
+`.trim();
+
+    const notes = extractChangelogReleaseNotes(changelog, "1.0.5");
+    assert.match(notes, /^## \[1\.0\.5\]$/m);
+    assert.match(notes, /Added manual run to Github action/);
+    assert.doesNotMatch(notes, /unreleased/);
+    assert.doesNotMatch(notes, /1\.0\.3/);
+});
+
+test("extractChangelogReleaseNotes creates minimal notes when no section exists", () => {
+    const notes = extractChangelogReleaseNotes("", "1.0.5");
+    assert.equal(notes, "## [1.0.5]\n\nNo changelog entry was found for this release.\n");
+});
