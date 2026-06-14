@@ -4,6 +4,12 @@ on:
   push:
     tags:
       - "v*.*.*"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Release tag, e.g. v1.2.3"
+        required: true
+        type: string
 
 permissions:
   contents: write
@@ -12,11 +18,15 @@ jobs:
   release:
     runs-on: ubuntu-latest
 
+    env:
+      RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
+          ref: ${{ env.RELEASE_TAG }}
 
       - name: Setup Node
         uses: actions/setup-node@v4
@@ -31,12 +41,13 @@ jobs:
         run: npm test
 
       - name: Build release bundle
-        run: npm run release:build -- "${GITHUB_REF_NAME}"
+        run: npm run release:build -- "${RELEASE_TAG}"
 
       - name: Publish GitHub release
         uses: softprops/action-gh-release@v2
         with:
+          tag_name: ${{ env.RELEASE_TAG }}
           body_path: dist/release/release-notes.md
           files: |
             dist/release/side-initiative/module.json
-            dist/release/side-initiative-${{ github.ref_name }}.zip
+            dist/release/side-initiative-${{ env.RELEASE_TAG }}.zip
