@@ -1,3 +1,12 @@
+## [unreleased]
+
+### 🐛 Bug Fixes
+
+- Hopefully the last CI/CD fix
+
+### 📚 Documentation
+
+- *(changelog)* Update changelog
 ## [1.0.5] - 2026-06-14
 
 ### ⚙️ Miscellaneous Tasks
