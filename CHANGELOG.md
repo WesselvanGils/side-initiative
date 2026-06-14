@@ -1,8 +1,17 @@
-## [unreleased]
+## [1.0.5] - 2026-06-14
+
+### ⚙️ Miscellaneous Tasks
+
+- Updated node version in Github action
+## [1.0.4] - 2026-06-14
 
 ### 🐛 Bug Fixes
 
 - Added manual run to Github action
+
+### 📚 Documentation
+
+- *(changelog)* Update changelog
 ## [1.0.3] - 2026-06-14
 
 ### 🚀 Features
