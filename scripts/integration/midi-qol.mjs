@@ -11,7 +11,42 @@ function isActiveGMClient() {
 }
 
 function getActorKey(actor, combatant) {
-    return actor?.id ?? actor?.uuid ?? combatant?.id ?? null;
+    return actor?.uuid ?? combatant?.token?.uuid ?? combatant?.token?.document?.uuid ?? actor?.id ?? combatant?.id ?? null;
+}
+
+function collectCombatantActors(combatant) {
+    const actors = [];
+    const seen = new Set();
+    const tokenSources = [
+        combatant?.token,
+        combatant?.tokenDocument,
+        combatant?.document?.token,
+        combatant?.token?.document,
+        combatant?.token?.object,
+        combatant?.token?.object?.document
+    ];
+    const pushActor = (actor, fallbackKey = null) => {
+        if (!actor) return;
+        const key = actor?.uuid ?? fallbackKey ?? actor?.id ?? null;
+        if (!key || seen.has(key)) return;
+        seen.add(key);
+        actors.push(actor);
+    };
+
+    for (const token of tokenSources) {
+        pushActor(token?.actor ?? token?.document?.actor ?? null, token?.uuid ?? token?.document?.uuid ?? combatant?.id ?? null);
+    }
+
+    for (const token of combatant?.actor?.getActiveTokens?.() ?? []) {
+        pushActor(token?.actor ?? token?.document?.actor ?? null, token?.uuid ?? token?.document?.uuid ?? combatant?.id ?? null);
+    }
+
+    if (!actors.length) {
+        pushActor(combatant?.actor, combatant?.id ?? null);
+        pushActor(combatant?.document?.actor, combatant?.id ?? null);
+    }
+
+    return actors;
 }
 
 async function resetReactionUsed(actor) {
@@ -43,10 +78,11 @@ async function resetReactionsForSide(combat, sideId) {
 
     const actors = new Map();
     for (const combatant of getCombatantsForSide(combat, sideId, { includeDefeated: false })) {
-        const actor = combatant?.actor ?? combatant?.document?.actor ?? null;
-        const key = getActorKey(actor, combatant);
-        if (!actor || !key || actors.has(key)) continue;
-        actors.set(key, actor);
+        for (const actor of collectCombatantActors(combatant)) {
+            const key = getActorKey(actor, combatant);
+            if (!actor || !key || actors.has(key)) continue;
+            actors.set(key, actor);
+        }
     }
 
     for (const actor of actors.values()) {
