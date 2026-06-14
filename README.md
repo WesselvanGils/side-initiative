@@ -36,6 +36,15 @@ Commander changes default to side owners and can be restricted to the GM in the 
 
 ## Development
 
+Setup your environment by creating a `foundry-config.yaml` with:
+```yml
+installPath: "/path/to/your/foundry/installation"
+```
+And then running:
+```bash
+npm run createSymlinks
+```
+
 Run the logic tests with:
 
 ```bash
