@@ -148,3 +148,6 @@ vite.config.ts.timestamp-*
 # Foundry
 foundry-config.yaml
 foundry
+
+# Foundry modules
+libs

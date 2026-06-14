@@ -96,8 +96,8 @@ test("MidiQOL blocks reaction consumption for actors on the active side", async 
 test("MidiQOL clears used reactions through the public API when a side becomes active again", async () => {
     const calls = [];
     const midiQol = {
-        async setReactionUsed(actor, active) {
-            calls.push({ method: "setReactionUsed", actorId: actor.id, active });
+        async removeReactionUsed(actor, force) {
+            calls.push({ method: "removeReactionUsed", actorId: actor.id, force });
         }
     };
 
@@ -136,23 +136,35 @@ test("MidiQOL clears used reactions through the public API when a side becomes a
         await sideTurnStart({ combat, sideId: "players" });
 
         assert.deepEqual(calls, [
-            { method: "setReactionUsed", actorId: "actor-1", active: false },
-            { method: "setReactionUsed", actorId: "actor-2", active: false }
+            { method: "removeReactionUsed", actorId: "actor-1", force: true },
+            { method: "removeReactionUsed", actorId: "actor-2", force: true }
         ]);
     } finally {
         env.restore();
     }
 });
 
-test("MidiQOL falls back to removeReactionUsed when setReactionUsed is unavailable", async () => {
-    const calls = [];
-    const midiQol = {
-        async removeReactionUsed(actor, force) {
-            calls.push({ method: "removeReactionUsed", actorId: actor.id, force });
+test("MidiQOL falls back to a direct reaction clear when the API is unavailable", async () => {
+    const deletes = [];
+    const updates = [];
+    const reactionEffectId = "dnd5ereaction000";
+    const actor = {
+        id: "actor-1",
+        effects: new Map([
+            [
+                reactionEffectId,
+                {
+                    async delete() {
+                        deletes.push(reactionEffectId);
+                    }
+                }
+            ]
+        ]),
+        async update(data) {
+            updates.push(data);
         }
     };
 
-    const actor = { id: "actor-1" };
     const combat = {
         started: true,
         combatants: [
@@ -174,15 +186,26 @@ test("MidiQOL falls back to removeReactionUsed when setReactionUsed is unavailab
         }
     };
 
-    const env = installGlobals({ combat, midiQol });
+    const env = installGlobals({ combat, midiQol: {} });
     try {
         registerMidiQolIntegration();
 
         const [sideTurnStart] = env.hooks.get("side-initiative.sideTurnStart");
         await sideTurnStart({ combat, sideId: "players" });
 
-        assert.deepEqual(calls, [
-            { method: "removeReactionUsed", actorId: "actor-1", force: true }
+        assert.deepEqual(deletes, [reactionEffectId]);
+        assert.deepEqual(updates, [
+            {
+                flags: {
+                    "midi-qol": {
+                        actions: {
+                            reactionUsed: 0,
+                            reactionsUsed: 0,
+                            "-=reactionCombatRound": null
+                        }
+                    }
+                }
+            }
         ]);
     } finally {
         env.restore();

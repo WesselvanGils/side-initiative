@@ -40,6 +40,12 @@ function isActiveGMClient() {
     return Boolean(game.user?.isGM);
 }
 
+function isPrimaryGMClient() {
+    const primaryGMId = game.gps?.getPrimaryGM?.() ?? game.users?.activeGM?.id ?? game.users?.getActiveGM?.()?.id ?? null;
+    if (primaryGMId) return game.user?.id === primaryGMId;
+    return isActiveGMClient();
+}
+
 function getSupportedVersionsLabel() {
     return Array.from(SUPPORTED_GAMBITS_PREMADES_VERSIONS).join(" or ");
 }
@@ -131,47 +137,75 @@ function getOpportunityAttackRegionBehaviors(region) {
     return [];
 }
 
-async function setOpportunityAttackRegionBehaviorsDisabled(region, disabled) {
-    const behaviors = getOpportunityAttackRegionBehaviors(region).filter((behavior) => behavior?.name === "onExit" || behavior?.name === "onEnter");
-    for (const behavior of behaviors) {
-        await behavior.update?.({ disabled });
-    }
+function getBehaviorSource(behavior) {
+    return behavior?.system?.source ?? behavior?.source ?? behavior?.command ?? null;
 }
 
-function isTurnBoundaryScenario(regionScenario) {
-    return regionScenario === "onTurnStart" || regionScenario === "onTurnEnd";
+function getBehaviorEvents(behavior) {
+    const events = behavior?.system?.events ?? behavior?.events ?? behavior?.data?.events ?? [];
+    if (Array.isArray(events)) return events.map(String);
+    if (events instanceof Set) return Array.from(events, String);
+    if (typeof events === "string") return [events];
+    return [];
 }
 
-function getCombatantTokenDocument(combatant) {
-    const candidates = [
-        combatant?.token,
-        combatant?.tokenDocument,
-        combatant?.document?.token,
-        combatant?.token?.document,
-        combatant?.token?.object?.document,
-        combatant?.document?.object?.document,
-        combatant?.actor?.prototypeToken
-    ];
+function isBehaviorEnabled(behavior) {
+    return !(behavior?.disabled ?? behavior?.system?.disabled ?? behavior?.data?.disabled);
+}
 
-    for (const candidate of candidates) {
-        if (candidate && typeof candidate === "object") return candidate;
+function getBehaviorType(behavior) {
+    return behavior?.type ?? behavior?.system?.type ?? null;
+}
+
+function isTurnEventBehavior(behavior, eventName) {
+    return getBehaviorType(behavior) === "executeScript" && isBehaviorEnabled(behavior) && getBehaviorEvents(behavior).includes(eventName);
+}
+
+function getCombatantTokenDocuments(combatant) {
+    const documents = [];
+    const seen = new Set();
+    const pushToken = (token) => {
+        const tokenDocument = token?.document ?? token ?? null;
+        const uuid = tokenDocument?.uuid ?? tokenDocument?.id ?? null;
+        if (!tokenDocument || !uuid || seen.has(uuid)) return;
+        seen.add(uuid);
+        documents.push(tokenDocument);
+    };
+
+    pushToken(combatant?.token);
+    pushToken(combatant?.tokenDocument);
+    pushToken(combatant?.document?.token);
+    pushToken(combatant?.document?.object?.document);
+    pushToken(combatant?.token?.document);
+    pushToken(combatant?.token?.object?.document);
+    pushToken(combatant?.actor?.token);
+    pushToken(combatant?.actor?.prototypeToken);
+
+    for (const token of combatant?.actor?.getActiveTokens?.() ?? []) {
+        pushToken(token);
     }
-    return null;
+
+    return documents;
 }
 
 function getTokenIdentifier(token) {
-    return token?.id ?? token?.uuid ?? token?.document?.id ?? token?.document?.uuid ?? null;
+    return token?.uuid ?? token?.id ?? null;
 }
 
-function getSceneForToken(token) {
+function getTokenScene(token) {
     return token?.parent ?? token?.scene ?? token?.document?.parent ?? token?.document?.scene ?? canvas?.scene ?? null;
 }
 
-function tokenIsInsideRegion(token, region) {
-    const tokenDocument = token?.document ?? token;
+async function tokenIsInsideRegion(tokenDocument, region) {
     if (typeof tokenDocument?.testInsideRegion === "function") {
         try {
-            return Boolean(tokenDocument.testInsideRegion(region));
+            return Boolean(await tokenDocument.testInsideRegion(region, {
+                x: tokenDocument.x,
+                y: tokenDocument.y,
+                width: tokenDocument.width,
+                height: tokenDocument.height,
+                elevation: tokenDocument.elevation
+            }));
         } catch {
             return false;
         }
@@ -179,7 +213,7 @@ function tokenIsInsideRegion(token, region) {
 
     if (typeof region?.testToken === "function") {
         try {
-            return Boolean(region.testToken(tokenDocument));
+            return Boolean(await region.testToken(tokenDocument));
         } catch {
             return false;
         }
@@ -188,56 +222,53 @@ function tokenIsInsideRegion(token, region) {
     return false;
 }
 
-function getRegionDispatchTarget(region) {
-    if (typeof region?._triggerEvent === "function") return region;
-    if (typeof region?.triggerEvent === "function") return region;
-    if (typeof region?.dispatchEvent === "function") return region;
-    if (typeof region?.document?._triggerEvent === "function") return region.document;
-    if (typeof region?.document?.triggerEvent === "function") return region.document;
-    if (typeof region?.document?.dispatchEvent === "function") return region.document;
-    return null;
+function getBehaviorExecutor() {
+    const AsyncFunction = globalThis.foundry?.utils?.AsyncFunction ?? Object.getPrototypeOf(async function asyncFn() {}).constructor;
+    return AsyncFunction;
 }
 
-async function dispatchRegionTurnEvent(region, eventName, token) {
-    const target = getRegionDispatchTarget(region);
-    const dispatcher = target?._triggerEvent ?? target?.triggerEvent ?? target?.dispatchEvent;
-    if (typeof dispatcher !== "function") return false;
+async function executeRegionBehaviorScript(behavior, event, region) {
+    const source = getBehaviorSource(behavior);
+    if (!source) return false;
 
-    const scene = getSceneForToken(token);
-    const payload = {
-        combat: game.combat ?? null,
-        data: {
-            token
-        },
-        eventName,
-        region,
-        scene,
-        token,
-        tokenDocument: token,
-        user: game.user ?? null
-    };
-
-    await dispatcher.call(target, eventName, payload);
+    const AsyncFunction = getBehaviorExecutor();
+    const fn = new AsyncFunction("event", "region", `"use strict";\n${source}`);
+    await fn.call(region, event, region);
     return true;
 }
 
-async function triggerTurnEventsForSide(combat, sideId, eventName) {
+async function executeTurnBehaviorsForSide(combat, sideId, eventName) {
     if (!combat?.started || !sideId) return;
 
     const tokens = new Map();
     for (const combatant of getCombatantsForSide(combat, sideId, { includeDefeated: false })) {
-        const token = getCombatantTokenDocument(combatant);
-        const tokenId = getTokenIdentifier(token) ?? combatant?.id ?? null;
-        if (!token || !tokenId || tokens.has(tokenId)) continue;
-        tokens.set(tokenId, token);
+        for (const tokenDocument of getCombatantTokenDocuments(combatant)) {
+            const tokenId = getTokenIdentifier(tokenDocument) ?? combatant?.id ?? null;
+            if (!tokenId || tokens.has(tokenId)) continue;
+            tokens.set(tokenId, tokenDocument);
+        }
     }
 
-    for (const token of tokens.values()) {
-        const scene = getSceneForToken(token);
+    for (const tokenDocument of tokens.values()) {
+        const scene = getTokenScene(tokenDocument);
         const regions = getRegionEntries(scene?.regions ?? []);
         for (const region of regions) {
-            if (!tokenIsInsideRegion(token, region)) continue;
-            await dispatchRegionTurnEvent(region, eventName, token);
+            if (!(await tokenIsInsideRegion(tokenDocument, region))) continue;
+            const matchingBehaviors = getOpportunityAttackRegionBehaviors(region).filter((behavior) => isTurnEventBehavior(behavior, eventName));
+            if (!matchingBehaviors.length) continue;
+
+            const event = {
+                combat,
+                data: {
+                    token: tokenDocument
+                },
+                region,
+                user: game.user ?? null
+            };
+
+            for (const behavior of matchingBehaviors) {
+                await executeRegionBehaviorScript(behavior, event, region);
+            }
         }
     }
 }
@@ -258,12 +289,6 @@ function createPatchedOpportunityAttackScenarios(original) {
 
         if (!combat || !tokenObjectId) {
             return original.call(this, payload);
-        }
-
-        if (isTurnBoundaryScenario(regionScenario) && game.sideInitiative?.isTokenOnActiveSide?.(token, combat)) {
-            if (!region) return;
-            await setOpportunityAttackRegionBehaviorsDisabled(region, false);
-            return;
         }
 
         const currentTokenId = combat.current?.tokenId;
@@ -350,14 +375,14 @@ function registerGambitsTurnHooks() {
 
     Hooks.on("side-initiative.sideTurnEnd", async ({ combat, sideId } = {}) => {
         if (integrationState.status !== "patched") return;
-        if (!game.user?.isGM || !isActiveGMClient()) return;
-        await triggerTurnEventsForSide(combat, sideId, "tokenTurnEnd");
+        if (!game.user?.isGM || !isPrimaryGMClient()) return;
+        await executeTurnBehaviorsForSide(combat, sideId, "tokenTurnEnd");
     });
 
     Hooks.on("side-initiative.sideTurnStart", async ({ combat, sideId } = {}) => {
         if (integrationState.status !== "patched") return;
-        if (!game.user?.isGM || !isActiveGMClient()) return;
-        await triggerTurnEventsForSide(combat, sideId, "tokenTurnStart");
+        if (!game.user?.isGM || !isPrimaryGMClient()) return;
+        await executeTurnBehaviorsForSide(combat, sideId, "tokenTurnStart");
     });
 }
 

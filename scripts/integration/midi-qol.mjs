@@ -4,7 +4,7 @@ import {
 } from "../logic.mjs";
 
 function getMidiQolApi() {
-    return globalThis.MidiQOL ?? globalThis.midiQOL ?? null;
+    return game.modules?.get?.("midi-qol")?.api ?? globalThis.MidiQOL ?? globalThis.midiQOL ?? null;
 }
 
 function isActiveGMClient() {
@@ -21,14 +21,35 @@ async function resetReactionUsed(actor) {
     if (!actor) return;
     const midiQol = getMidiQolApi();
 
+    if (typeof midiQol?.removeReactionUsed === "function") {
+        await midiQol.removeReactionUsed(actor, true);
+        return;
+    }
+
     if (typeof midiQol?.setReactionUsed === "function") {
         await midiQol.setReactionUsed(actor, false);
         return;
     }
 
-    if (typeof midiQol?.removeReactionUsed === "function") {
-        await midiQol.removeReactionUsed(actor, true);
-    }
+    const reactionEffectId = "dnd5ereaction000";
+    await actor.effects?.get?.(reactionEffectId)?.delete?.();
+    await actor.update?.({
+        flags: {
+            "midi-qol": {
+                actions: {
+                    reactionUsed: 0,
+                    reactionsUsed: 0,
+                    "-=reactionCombatRound": null
+                }
+            }
+        }
+    });
+}
+
+function isPrimaryGMClient() {
+    const primaryGMId = game.gps?.getPrimaryGM?.() ?? game.users?.activeGM?.id ?? game.users?.getActiveGM?.()?.id ?? null;
+    if (primaryGMId) return game.user?.id === primaryGMId;
+    return isActiveGMClient();
 }
 
 async function resetReactionsForSide(combat, sideId) {
@@ -58,7 +79,7 @@ export function registerMidiQolIntegration() {
     });
 
     Hooks.on("side-initiative.sideTurnStart", async ({ combat, sideId } = {}) => {
-        if (!game.user?.isGM || !isActiveGMClient()) return;
+        if (!game.user?.isGM || !isPrimaryGMClient()) return;
         await resetReactionsForSide(combat, sideId);
     });
 }
