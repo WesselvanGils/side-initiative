@@ -1,3 +1,8 @@
+## [unreleased]
+
+### 📚 Documentation
+
+- *(changelog)* Update changelog
 ## [1.0.6] - 2026-06-14
 
 ### 🐛 Bug Fixes
