@@ -1,5 +1,9 @@
 ## [unreleased]
 
+### 🚀 Features
+
+- Added automatic tags with changelog via just
+
 ### 🐛 Bug Fixes
 
 - Updated module.json with release url
