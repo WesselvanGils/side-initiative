@@ -1,8 +1,17 @@
 ## [unreleased]
 
+### 🐛 Bug Fixes
+
+- Added manual run to Github action
+## [1.0.3] - 2026-06-14
+
 ### 🚀 Features
 
 - Proper automatic releases through Github actions
+
+### 📚 Documentation
+
+- *(changelog)* Update changelog
 ## [1.0.2] - 2026-06-14
 
 ### 🐛 Bug Fixes
