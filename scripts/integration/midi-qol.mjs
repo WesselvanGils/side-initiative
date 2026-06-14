@@ -3,9 +3,6 @@ import {
     isActorOnActiveSide
 } from "../logic.mjs";
 
-function getMidiQolApi() {
-    return game.modules?.get?.("midi-qol")?.api ?? globalThis.MidiQOL ?? globalThis.midiQOL ?? null;
-}
 
 function isActiveGMClient() {
     const activeGM = game.users?.activeGM ?? game.users?.getActiveGM?.() ?? Array.from(game.users?.contents ?? []).find((user) => user?.isGM && user?.active) ?? null;
@@ -19,17 +16,6 @@ function getActorKey(actor, combatant) {
 
 async function resetReactionUsed(actor) {
     if (!actor) return;
-    const midiQol = getMidiQolApi();
-
-    if (typeof midiQol?.removeReactionUsed === "function") {
-        await midiQol.removeReactionUsed(actor, true);
-        return;
-    }
-
-    if (typeof midiQol?.setReactionUsed === "function") {
-        await midiQol.setReactionUsed(actor, false);
-        return;
-    }
 
     const reactionEffectId = "dnd5ereaction000";
     await actor.effects?.get?.(reactionEffectId)?.delete?.();
