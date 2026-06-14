@@ -15,4 +15,5 @@ release version:
     fi
 
     git tag "{{version}}"
+
     git push origin main "{{version}}"

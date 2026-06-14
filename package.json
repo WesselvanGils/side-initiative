@@ -6,7 +6,8 @@
         "test": "node --test tests/*.test.js",
         "createSymlinks": "node ./tools/create-symlinks.mjs",
         "postinstall": "npm run createSymlinks",
-        "changelog": "git-cliff -o CHANGELOG.md"
+        "changelog": "git-cliff -o CHANGELOG.md",
+        "release:build": "node ./tools/build-release.mjs"
     },
     "devDependencies": {
         "js-yaml": "^4.2.0"
