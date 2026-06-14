@@ -214,8 +214,8 @@ test("Gambits integration patches the active-side bypass and preserves the origi
     }
 });
 
-test("Gambits integration keeps the commander's OA region enabled on turn start", async () => {
-    const env = installGlobals({ currentTokenId: "active-token" });
+test("Gambits integration keeps an active-side token's OA region enabled on turn start", async () => {
+    const env = installGlobals();
     try {
         registerGambitsPremadesIntegration();
 
@@ -223,6 +223,27 @@ test("Gambits integration keeps the commander's OA region enabled on turn start"
             tokenUuid: "active-token",
             regionUuid: "region-1",
             regionScenario: "onTurnStart"
+        });
+
+        assert.equal(result, undefined);
+        assert.deepEqual(env.regionUpdates, [
+            { behavior: "onExit", disabled: false },
+            { behavior: "onEnter", disabled: false }
+        ]);
+    } finally {
+        env.restore();
+    }
+});
+
+test("Gambits integration keeps an active-side token's OA region enabled on turn end", async () => {
+    const env = installGlobals();
+    try {
+        registerGambitsPremadesIntegration();
+
+        const result = await game.gps.opportunityAttackScenarios({
+            tokenUuid: "active-token",
+            regionUuid: "region-1",
+            regionScenario: "onTurnEnd"
         });
 
         assert.equal(result, undefined);

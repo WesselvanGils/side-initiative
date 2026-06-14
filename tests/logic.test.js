@@ -369,6 +369,56 @@ test("advanceSide uses the combat turn order when it differs from combatant orde
     assert.equal(getActiveSideId(combat), "players");
 });
 
+test("advanceSide emits side turn lifecycle hooks", async () => {
+    const p1 = createCombatant({ id: "pc-1", hasPlayerOwner: true, disposition: 1 });
+    const m1 = createCombatant({ id: "npc-1", hasPlayerOwner: false, disposition: -1 });
+    const combat = createCombat(
+        [p1, m1],
+        {
+            activeSideId: "players",
+            order: ["players", "monsters"],
+            sides: {
+                players: { id: "players", combatantIds: ["pc-1"] },
+                monsters: { id: "monsters", combatantIds: ["npc-1"] }
+            }
+        },
+        [p1, m1]
+    );
+
+    const events = [];
+    const originalHooks = globalThis.Hooks;
+    globalThis.Hooks = {
+        callAll(name, payload) {
+            events.push({ name, payload });
+        }
+    };
+
+    try {
+        await SideInitiativeAPI.advanceSide(combat, 1);
+
+        assert.deepEqual(events, [
+            {
+                name: "side-initiative.sideTurnEnd",
+                payload: {
+                    combat,
+                    sideId: "players",
+                    nextSideId: "monsters"
+                }
+            },
+            {
+                name: "side-initiative.sideTurnStart",
+                payload: {
+                    combat,
+                    sideId: "monsters",
+                    previousSideId: "players"
+                }
+            }
+        ]);
+    } finally {
+        globalThis.Hooks = originalHooks;
+    }
+});
+
 test("rollSideInitiativeData rerolls tied sides until unique", () => {
     const rng = (() => {
         const values = [0.1, 0.5, 0.1, 0.6, 0.4, 0.7, 0.8, 0.2];

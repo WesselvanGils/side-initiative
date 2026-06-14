@@ -113,6 +113,10 @@ async function setOpportunityAttackRegionBehaviorsDisabled(region, disabled) {
     }
 }
 
+function isTurnBoundaryScenario(regionScenario) {
+    return regionScenario === "onTurnStart" || regionScenario === "onTurnEnd";
+}
+
 function createPatchedOpportunityAttackScenarios(original) {
     return async function patchedOpportunityAttackScenarios(payload) {
         const tokenUuid = payload?.tokenUuid;
@@ -126,7 +130,7 @@ function createPatchedOpportunityAttackScenarios(original) {
             return original.call(this, payload);
         }
 
-        if (regionScenario === "onTurnStart" && game.sideInitiative?.isTokenOnActiveSide?.(token, combat)) {
+        if (isTurnBoundaryScenario(regionScenario) && game.sideInitiative?.isTokenOnActiveSide?.(token, combat)) {
             if (!region) return;
             await setOpportunityAttackRegionBehaviorsDisabled(region, false);
             return;

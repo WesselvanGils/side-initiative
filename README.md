@@ -31,7 +31,7 @@ Commander changes default to side owners and can be restricted to the GM in the 
 
 - Side Initiative patches Gambits Premades Opportunity Attack at runtime for the supported Gambits version `2.1.43`.
 - The patch is guarded: if the installed Gambits version or source shape does not match the supported build, integration is disabled internally and the GM is warned.
-- The commander token keeps its OA region enabled while its side is active so the side can still make opportunity attacks during that phase.
+- The active side's tokens keep their OA region enabled while their side is active so the side can still make opportunity attacks during that phase.
 - If you use side initiative, keep Gambits Premades Opportunity Attack disabled only when the compatibility warning reports an unsupported Gambits build.
 
 ## Development

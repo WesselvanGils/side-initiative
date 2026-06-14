@@ -80,6 +80,30 @@ async function syncCombatToSide(combat, sideId, { roundDelta = 0 } = {}) {
 }
 
 /**
+ * Emit side turn lifecycle hooks after a side transition completes.
+ * @param {object | null | undefined} combat
+ * @param {string | null | undefined} previousSideId
+ * @param {string | null | undefined} nextSideId
+ * @returns {void}
+ */
+function emitSideTurnHooks(combat, previousSideId, nextSideId) {
+    const normalizedPreviousSideId = previousSideId ? normalizeSideId(previousSideId) : null;
+    const normalizedNextSideId = nextSideId ? normalizeSideId(nextSideId) : null;
+    if (normalizedPreviousSideId === normalizedNextSideId) return;
+
+    globalThis.Hooks?.callAll?.("side-initiative.sideTurnEnd", {
+        combat,
+        sideId: normalizedPreviousSideId,
+        nextSideId: normalizedNextSideId
+    });
+    globalThis.Hooks?.callAll?.("side-initiative.sideTurnStart", {
+        combat,
+        sideId: normalizedNextSideId,
+        previousSideId: normalizedPreviousSideId
+    });
+}
+
+/**
  * Resolve combatant documents from a combat document.
  * @param {object | null | undefined} combat
  * @returns {Array<object>}
@@ -505,12 +529,14 @@ export const SideInitiativeAPI = {
         const resolvedCombat = getCombatFromArgument(combat);
         if (!resolvedCombat) return null;
         const normalizedSideId = normalizeSideId(sideId);
+        const previousSideId = getActiveSideId(resolvedCombat);
         const state = getCombatState(resolvedCombat);
         state.activeSideId = normalizedSideId;
         state.activeSideIndex = Math.max(0, getOrderedSideIds(resolvedCombat).indexOf(normalizedSideId));
         state.activeCombatantId = getSideRepresentativeCombatant(resolvedCombat, normalizedSideId)?.id ?? null;
         await setCombatState(resolvedCombat, cloneSideStateForSave(state, resolvedCombat.combatants));
         await syncCombatToSide(resolvedCombat, normalizedSideId, { roundDelta: 0 });
+        emitSideTurnHooks(resolvedCombat, previousSideId, normalizedSideId);
         return state;
     },
 
@@ -528,6 +554,7 @@ export const SideInitiativeAPI = {
         state.activeCombatantId = getSideRepresentativeCombatant(resolvedCombat, nextSideId)?.id ?? null;
         await setCombatState(resolvedCombat, cloneSideStateForSave(state, resolvedCombat.combatants));
         await syncCombatToSide(resolvedCombat, nextSideId, { roundDelta });
+        emitSideTurnHooks(resolvedCombat, currentSideId, nextSideId);
         return state;
     },
 
