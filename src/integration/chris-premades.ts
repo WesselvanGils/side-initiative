@@ -1,4 +1,4 @@
-import { getCombatantSideId, getCombatantsForSide, getSideCommanderCombatant, isSideCombat, normalizeSideId } from "../logic.js";
+import { getCombatantsForSide, isSideCombat } from "../logic.js";
 import { hooks, isPrimaryGMClient } from "../runtime.js";
 import type { CombatLike, CombatantLike, SideTurnPayload, TokenLike } from "../types.js";
 
@@ -21,31 +21,35 @@ function debug(...parts: unknown[]): void {
  * in `libs/chris-premades/scripts/events/combat.js`. That handler runs the
  * `turnStart`/`turnEnd` template and region macro passes for the SINGLE current
  * combatant only (`executeMacroPass([currentToken], 'turnStart')`). In
- * side-initiative the current combatant is the side's commander, so every other
- * token on the side silently misses those passes and never takes the damage.
+ * side-initiative the current combatant is the side's commander, so the model is
+ * fundamentally incompatible: CPR only ever fires for one token, and its native
+ * `updateCombat` runs as an un-awaited hook handler — so its commander workflow
+ * overlaps the bridge's per-token workflows. midi-qol cannot run concurrent
+ * programmatic damage workflows (they clobber the shared target selection, made
+ * worse by Dice So Nice's delayed rolls), so damage lands on the wrong token.
  *
  * Two mechanisms fix this:
  *
- * 1. Side-turn bridge: on `side-initiative.sideTurnStart`/`sideTurnEnd`, fire the
- *    CPR `turnStart`/`turnEnd` passes for every NON-commander token on the active
- *    side. CPR fires the commander's natively, so it is skipped (by
- *    `combat.current.combatantId`, the field CPR itself uses). CPR does not expose
- *    its dispatch on `globalThis.chrisPremades`, so this reuses the public macro
- *    objects (`chrisPremades.macros.<name>`) and `templateUtils.getTemplatesInToken`.
+ * 1. Update-combat wrap: fully suppress CPR's native `updateCombat` for
+ *    side-initiative combats, so it never launches a concurrent workflow. The
+ *    handler is found in the Foundry hook registry by source shape and its
+ *    `HookedFunction.fn` is wrapped in place.
  *
- * 2. Update-combat wrap: side-initiative advances `combat.turn` both on real side
- *    advances AND when switching the commander (see `syncCombatToSide`). CPR cannot
- *    tell those apart and would fire spurious `turnEnd`(old)/`turnStart`(new) on a
- *    mere commander switch. We wrap CPR's `updateCombat` hook handler to suppress it
- *    when the turn change stays WITHIN one side (a commander switch); real
- *    cross-side advances still dispatch natively (commander only) and the bridge
- *    covers the rest.
+ * 2. Side-turn bridge: on `side-initiative.sideTurnStart`/`sideTurnEnd`, fire the
+ *    CPR `turnStart`/`turnEnd` (and `everyTurn`) passes for EVERY token on the
+ *    active side — no skip, since there is no native fire to dedup against. All
+ *    workflows go through a serialized queue (mutex) so `sideTurnEnd` and
+ *    `sideTurnStart` (and every token within) fire one at a time. CPR does not
+ *    expose its dispatch on `globalThis.chrisPremades`, so this reuses the public
+ *    macro objects (`chrisPremades.macros.<name>`) and `templateUtils.getTemplatesInToken`.
  *
  * Movement-based passes (`enter`/`left`) are driven by CPR's own movement events
- * and are unaffected, so they are intentionally not bridged here.
+ * and are unaffected, so they are intentionally not bridged here. The
+ * `turnStartSource`/`turnEndSource`/`turnStartNear`/`turnEndNear` passes are not
+ * bridged (niche; lost when CPR's native updateCombat is suppressed for side combats).
  */
 
-type TurnPass = "turnStart" | "turnEnd";
+type TurnPass = "turnStart" | "turnEnd" | "everyTurn";
 type EntityKind = "template" | "region";
 
 interface CprMacroArg {
@@ -356,21 +360,32 @@ function resolveCombatantToken(combatant: CombatantLike | null | undefined): { d
     return { document: tokenDocument, placeable };
 }
 
-async function bridgeSideTurn(payload: SideTurnPayload, pass: TurnPass): Promise<void> {
-    if (!isPrimaryGMClient()) return;
-    const combat = payload?.combat ?? null;
-    const sideId = payload?.sideId ?? null;
-    if (!combat || !sideId || !validateCprShape()) return;
+/**
+ * Serialized queue for bridge-fired workflows. midi-qol cannot run concurrent
+ * programmatic damage workflows — they clobber the shared target selection
+ * (visibly so once Dice So Nice delays the rolls), which is what made the
+ * commander "absorb" other tokens' damage. Every batch of workflows the bridge
+ * launches is chained onto this promise so they run strictly one at a time,
+ * including across the back-to-back `sideTurnEnd`/`sideTurnStart` hooks.
+ */
+let workflowChain: Promise<void> = Promise.resolve();
 
-    // The bridge always fires for the side whose turn is starting/ending. CPR fires
-    // the native pass for that side's commander, so skip the commander to avoid
-    // double-processing. Resolve the commander from side-initiative's own state
-    // (`getSideCommanderCombatant`) — deterministic and immune to `combat.current`
-    // timing around the `combat.update` in `syncCombatToSide`. Fall back to
-    // `combat.current.combatantId` (the field CPR uses) if no commander is set.
-    const commander = getSideCommanderCombatant(combat, sideId);
-    const skipCombatantId = commander?.id ?? getCombatTurnRef(combat, "current")?.combatantId ?? null;
+function enqueueWorkflowBatch(task: () => Promise<void>): void {
+    workflowChain = workflowChain
+        .catch(() => undefined)
+        .then(task)
+        .then(() => undefined, (error) => debug("workflow batch rejected:", error));
+}
 
+/**
+ * Await the serialized workflow queue (tests/diagnostics). Resolves once every
+ * bridge-fired batch queued so far has completed.
+ */
+export async function flushCprBridge(): Promise<void> {
+    await workflowChain.catch(() => undefined);
+}
+
+async function firePassesForSide(combat: CombatLike, sideId: string, passes: readonly TurnPass[]): Promise<void> {
     const current = getCombatTurnRef(combat, "current");
     const previous = getCombatTurnRef(combat, "previous");
     const details: TurnDetails = {
@@ -380,38 +395,40 @@ async function bridgeSideTurn(payload: SideTurnPayload, pass: TurnPass): Promise
         previousRound: previous?.round ?? -1
     };
 
-    debug(`${pass} side=${sideId} skipCombatant=${skipCombatantId} current.combatantId=${current?.combatantId ?? null}`);
-
+    debug(`bridge passes=[${passes.join(",")}] side=${sideId}`);
     for (const combatant of getCombatantsForSide(combat, sideId, { includeDefeated: false })) {
         const { document: tokenDocument, placeable: tokenPlaceable } = resolveCombatantToken(combatant);
         const combatantId = combatant?.id ?? null;
         const placeableId = (tokenPlaceable as { id?: string } | null)?.id ?? null;
-        const documentId = tokenDocument?.id ?? null;
         if (!tokenPlaceable) {
-            debug(`  combatant=${combatantId} SKIP (no token placeable; documentId=${documentId})`);
+            debug(`  combatant=${combatantId} SKIP (no token placeable)`);
             continue;
         }
-        if (skipCombatantId && combatantId === skipCombatantId) {
-            debug(`  combatant=${combatantId} SKIP (commander; placeable=${placeableId})`);
-            continue;
+        for (const pass of passes) {
+            const triggers = collectTriggersForToken(tokenDocument, tokenPlaceable, pass, details);
+            if (triggers.length === 0) continue;
+            debug(`  combatant=${combatantId} placeable=${placeableId} pass=${pass} firing ${triggers.length} trigger(s)`);
+            // Await each macro so the next workflow only starts once this one
+            // (rolls + damage) has completed.
+            await invokeTriggers(triggers, combatantId, placeableId);
         }
-
-        const triggers = collectTriggersForToken(tokenDocument, tokenPlaceable, pass, details);
-        if (triggers.length === 0) {
-            debug(`  combatant=${combatantId} placeable=${placeableId} no triggers`);
-            continue;
-        }
-        debug(`  combatant=${combatantId} placeable=${placeableId} firing ${triggers.length} trigger(s) targeting this token`);
-        // Await sequentially — macros mutate world state and create workflows.
-        await invokeTriggers(triggers, combatantId, placeableId);
     }
+}
+
+function bridgeSideTurn(payload: SideTurnPayload, passes: readonly TurnPass[]): void {
+    if (!isPrimaryGMClient()) return;
+    const combat = payload?.combat ?? null;
+    const sideId = payload?.sideId ?? null;
+    if (!combat || !sideId || !validateCprShape()) return;
+    // Capture combat/sideId synchronously; fire the batch on the serialized queue.
+    enqueueWorkflowBatch(() => firePassesForSide(combat, sideId, passes));
 }
 
 function registerSideTurnBridge(): void {
     if (integrationState.bridgeRegistered) return;
     integrationState.bridgeRegistered = true;
-    hooks()?.on("side-initiative.sideTurnStart", (payload: SideTurnPayload) => bridgeSideTurn(payload ?? {}, "turnStart"));
-    hooks()?.on("side-initiative.sideTurnEnd", (payload: SideTurnPayload) => bridgeSideTurn(payload ?? {}, "turnEnd"));
+    hooks()?.on("side-initiative.sideTurnStart", (payload: SideTurnPayload) => bridgeSideTurn(payload ?? {}, ["turnStart", "everyTurn"]));
+    hooks()?.on("side-initiative.sideTurnEnd", (payload: SideTurnPayload) => bridgeSideTurn(payload ?? {}, ["turnEnd"]));
 }
 
 /**
@@ -433,24 +450,17 @@ function isCprUpdateCombatSource(fn: unknown): boolean {
 }
 
 /**
- * Whether a CPR `updateCombat` dispatch should be suppressed for this combat.
- * Suppress only when the turn change stays WITHIN a single side of a
- * side-initiative combat — i.e. a commander switch via `syncCombatToSide`, which
- * CPR cannot distinguish from a real turn advance and would mis-handle as a
- * `turnEnd`(old commander)/`turnStart`(new commander) pair. Real cross-side
- * advances (and the first turn, where there is no previous) dispatch natively,
- * and the side-turn bridge covers the non-commander tokens.
+ * Whether CPR's native `updateCombat` should be suppressed. For side-initiative
+ * combats it is ALWAYS suppressed: CPR's per-current-combatant turn model is
+ * incompatible with side initiative, and its native dispatch runs un-awaited from
+ * the hook (overlapping the bridge's workflows and clobbering midi-qol's shared
+ * target selection). The side-turn bridge owns `turnStart`/`turnEnd`/`everyTurn`
+ * for every token on the active side instead. CPR's `updateCombat` only dispatches
+ * macro passes (it early-returns unless the turn/round changed), so suppressing it
+ * affects nothing else. Non-side combats are left untouched.
  */
 function shouldSuppressCprUpdateCombat(combat: CombatLike | null | undefined): boolean {
-    if (!isSideCombat(combat)) return false;
-    const previousId = getCombatTurnRef(combat, "previous")?.combatantId ?? null;
-    const currentId = getCombatTurnRef(combat, "current")?.combatantId ?? null;
-    if (!previousId || !currentId) return false;
-    const collection = combat?.combatants as { get?(id: string): CombatantLike | null | undefined } | undefined;
-    const previous = collection?.get?.call(combat?.combatants, previousId) ?? null;
-    const current = collection?.get?.call(combat?.combatants, currentId) ?? null;
-    if (!previous || !current) return false;
-    return normalizeSideId(getCombatantSideId(previous)) === normalizeSideId(getCombatantSideId(current));
+    return isSideCombat(combat);
 }
 
 /**

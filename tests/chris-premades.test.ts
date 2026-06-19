@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import {
+    flushCprBridge,
     getCprPremadesIntegrationState,
     getCprPremadesVersion,
     registerChrisPremadesIntegration,
@@ -194,13 +195,15 @@ function installGlobals(options: InstallOptions = {}) {
         utils: { templateUtils }
     };
 
-    function emitSideTurnStart(sideId: string) {
+    async function emitSideTurnStart(sideId: string) {
         const [handler] = (globalThis.Hooks as ReturnType<typeof createHooks>).get("side-initiative.sideTurnStart");
-        return handler?.({ combat: (globalThis.game as { combat: unknown }).combat, sideId });
+        handler?.({ combat: (globalThis.game as { combat: unknown }).combat, sideId });
+        await flushCprBridge();
     }
-    function emitSideTurnEnd(sideId: string) {
+    async function emitSideTurnEnd(sideId: string) {
         const [handler] = (globalThis.Hooks as ReturnType<typeof createHooks>).get("side-initiative.sideTurnEnd");
-        return handler?.({ combat: (globalThis.game as { combat: unknown }).combat, sideId });
+        handler?.({ combat: (globalThis.game as { combat: unknown }).combat, sideId });
+        await flushCprBridge();
     }
 
     return {
@@ -286,7 +289,7 @@ test("CPR integration is a no-op when the module is inactive", () => {
     }
 });
 
-test("CPR bridge fires turnStart for non-commander side tokens, not the commander", async () => {
+test("CPR bridge fires turnStart for every token on the side (no skip — CPR native is suppressed)", async () => {
     const env = installGlobals({
         currentTokenId: "commander",
         templates: [HUNGER_TEMPLATE(["commander", "member"])]
@@ -295,19 +298,16 @@ test("CPR bridge fires turnStart for non-commander side tokens, not the commande
         registerChrisPremadesIntegration();
         await env.emitSideTurnStart("players");
 
-        const invoked = env.invocations.filter((i) => i.macro === "hunger-start").map((i) => i.tokenId);
-        assert.deepEqual(invoked, ["member"]);
-        assert.equal(env.invocations.some((i) => i.tokenId === "commander"), false);
+        const invoked = env.invocations.filter((i) => i.macro === "hunger-start").map((i) => i.tokenId).sort();
+        // No skip: the commander is fired by the bridge too (CPR native is suppressed).
+        assert.deepEqual(invoked, ["commander", "member"]);
     } finally {
         env.restore();
     }
 });
 
-test("CPR bridge fires turnEnd for non-commander side tokens", async () => {
+test("CPR bridge fires turnEnd for every token on the side", async () => {
     const env = installGlobals({
-        // The ending side is still `combat.current` when sideTurnEnd is emitted
-        // (the turn has not advanced yet), so the skip must target current, not
-        // previous. Point previous at a different token to prove it is ignored.
         currentTokenId: "commander",
         previousTokenId: "member",
         templates: [HUNGER_TEMPLATE(["commander", "member"])]
@@ -316,8 +316,8 @@ test("CPR bridge fires turnEnd for non-commander side tokens", async () => {
         registerChrisPremadesIntegration();
         await env.emitSideTurnEnd("players");
 
-        const invoked = env.invocations.filter((i) => i.macro === "hunger-end").map((i) => i.tokenId);
-        assert.deepEqual(invoked, ["member"]);
+        const invoked = env.invocations.filter((i) => i.macro === "hunger-end").map((i) => i.tokenId).sort();
+        assert.deepEqual(invoked, ["commander", "member"]);
     } finally {
         env.restore();
     }
@@ -438,10 +438,7 @@ test("CPR bridge excludes defeated combatants", async () => {
     }
 });
 
-test("CPR bridge skips the commander via combat.current on turnEnd even when previous is unset", async () => {
-    // CPR fires turnEnd for the ending side's commander regardless of whether a
-    // previous turn existed, so the skip (combat.current) must hold even when
-    // combat.previous is null/undefined.
+test("CPR bridge fires for all side tokens on turnEnd even when previous is unset", async () => {
     const env = installGlobals({
         currentTokenId: "commander",
         previousTokenId: null,
@@ -452,13 +449,13 @@ test("CPR bridge skips the commander via combat.current on turnEnd even when pre
         await env.emitSideTurnEnd("players");
 
         const invoked = env.invocations.filter((i) => i.macro === "hunger-end").map((i) => i.tokenId).sort();
-        assert.deepEqual(invoked, ["member"]);
+        assert.deepEqual(invoked, ["commander", "member"]);
     } finally {
         env.restore();
     }
 });
 
-test("CPR bridge never fires an everyTurn pass", async () => {
+test("CPR bridge fires everyTurn passes at side start (preserves CPR's native everyTurn)", async () => {
     const env = installGlobals({
         currentTokenId: "commander",
         templates: [
@@ -473,7 +470,7 @@ test("CPR bridge never fires an everyTurn pass", async () => {
         registerChrisPremadesIntegration();
         await env.emitSideTurnStart("players");
 
-        assert.equal(env.invocations.some((i) => i.macro === "every-turn"), false);
+        assert.equal(env.invocations.some((i) => i.macro === "every-turn"), true);
     } finally {
         env.restore();
     }
@@ -503,15 +500,13 @@ test("CPR updateCombat wrap suppresses within-side turn changes (commander switc
         assert.ok(typeof wrapped === "function");
         await wrapped!(env.combat);
 
-        // Previous (member) and current (commander) are both on `players`, so this
-        // is a commander switch and CPR's native dispatch must be suppressed.
         assert.equal(dispatches.length, 0);
     } finally {
         env.restore();
     }
 });
 
-test("CPR updateCombat wrap lets real cross-side advances dispatch natively", async () => {
+test("CPR updateCombat wrap suppresses ALL side-combat turn changes (cross-side advances too)", async () => {
     const dispatches: unknown[] = [];
     const env = installGlobals({
         currentCombatantId: "combatant-commander",
@@ -524,8 +519,10 @@ test("CPR updateCombat wrap lets real cross-side advances dispatch natively", as
         const wrapped = env.getUpdateCombatHandler();
         await wrapped!(env.combat);
 
-        // Previous (monsters) and current (players) differ → real advance → dispatch.
-        assert.equal(dispatches.length, 1);
+        // The bridge owns turnStart/turnEnd for side combats, so CPR's native
+        // dispatch is suppressed even on a real cross-side advance — otherwise its
+        // un-awaited commander workflow would run concurrently with the bridge.
+        assert.equal(dispatches.length, 0);
     } finally {
         env.restore();
     }
@@ -564,6 +561,35 @@ test("CPR updateCombat wrap does not touch handlers that do not match CPR's shap
 
         // The non-matching handler is left untouched (still the original reference).
         assert.equal(env.getUpdateCombatHandler(), notCpr);
+    } finally {
+        env.restore();
+    }
+});
+
+test("CPR bridge awaits each workflow before the next so slow macros never interleave", async () => {
+    const log: string[] = [];
+    const slow = async function slowMacro({ trigger }: { trigger: { token?: { id?: string } } }) {
+        log.push(`start ${trigger.token?.id}`);
+        await new Promise((resolve) => setTimeout(resolve, 5));
+        log.push(`end ${trigger.token?.id}`);
+    };
+    const env = installGlobals({
+        macros: { slowTemplate: { template: [{ pass: "turnStart", priority: 50, macro: slow }] } },
+        templates: [
+            {
+                id: "tpl-slow",
+                tokenIds: new Set(["commander", "member"]),
+                flags: { "chris-premades": { template: { name: "Slow" }, macros: { template: ["slowTemplate"] }, castData: { castLevel: 1, saveDC: 10 } } }
+            }
+        ]
+    });
+    try {
+        registerChrisPremadesIntegration();
+        await env.emitSideTurnStart("players");
+
+        // Each macro must fully complete (start + end) before the next begins —
+        // this is what stops concurrent midi-qol workflows from clobbering targets.
+        assert.deepEqual(log, ["start commander", "end commander", "start member", "end member"]);
     } finally {
         env.restore();
     }

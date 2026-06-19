@@ -2,7 +2,7 @@
 
 ### 🐛 Bug Fixes
 
-- *(chris-premades)* Bridge start/end-of-turn area triggers (e.g. Hunger of Hadar, Wall of Fire) to every token on the active side, not just the commander; skip the current commander by `combatantId` and suppress CPR's native turn dispatch on within-side commander switches so triggers don't double-fire
+- *(chris-premades)* Make area triggers (Hunger of Hadar, Wall of Fire, …) affect every token on the active side: suppress CPR's native `updateCombat` for side combats and bridge `turnStart`/`turnEnd`/`everyTurn` to all side tokens through a serialized queue, so concurrent midi-qol workflows no longer clobber the target selection (commander no longer absorbs others' damage)
 - *(gambits)* Scope the OA turn-guard override so it cannot leak
 ## [1.1.0] - 2026-06-19
 
