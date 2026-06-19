@@ -1,0 +1,25 @@
+{
+    "$schema": "https://json.schemastore.org/tsconfig.json",
+    "compilerOptions": {
+        "types": ["fvtt-types"],
+        "target": "ESNext",
+        "module": "ESNext",
+        "moduleResolution": "bundler",
+        "lib": ["ESNext", "DOM", "DOM.Iterable"],
+        "strict": true,
+        "noImplicitOverride": true,
+        "noFallthroughCasesInSwitch": true,
+        "forceConsistentCasingInFileNames": true,
+        "esModuleInterop": true,
+        "allowSyntheticDefaultImports": true,
+        "resolveJsonModule": true,
+        "isolatedModules": true,
+        "skipLibCheck": true,
+        "declaration": false,
+        "sourceMap": true,
+        "rootDir": "src",
+        "outDir": "scripts"
+    },
+    "include": ["src/**/*.ts"],
+    "exclude": ["node_modules", "tests", "tools", "scripts", "libs", "dist"]
+}
