@@ -51,6 +51,7 @@ interface InstallOptions {
     templateUtils?: unknown;
     macros?: Record<string, unknown>;
     sideCombat?: boolean;
+    midiAutoRemoveTargets?: string;
     cprUpdateCombat?: (...args: unknown[]) => unknown;
     extraCombatants?: Array<{ id: string; sideId: string; tokenId: string; defeated?: boolean; regions?: Set<unknown> }>;
 }
@@ -153,8 +154,18 @@ function installGlobals(options: InstallOptions = {}) {
         }
     };
 
+    const targetedTokens = new Set<{ id: string; setTarget(state: boolean, options?: { releaseOthers?: boolean }): void }>();
+    function targetToken(id: string) {
+        targetedTokens.add({
+            id,
+            setTarget(state) {
+                if (!state) targetedTokens.delete(this);
+            }
+        });
+    }
+
     globalThis.game = {
-        user: { id: "gm-1", isGM: true, active: true },
+        user: { id: "gm-1", isGM: true, active: true, targets: targetedTokens },
         users: { activeGM: { id: primaryGM, isGM: true, active: true } },
         combat: {
             started: true,
@@ -168,6 +179,12 @@ function installGlobals(options: InstallOptions = {}) {
             get(moduleId: string) {
                 if (moduleId === "chris-premades") return cprActive ? { active: true, version, data: { version } } : { active: false, version, data: { version } };
                 return null;
+            }
+        },
+        settings: {
+            get(scope: string, key: string) {
+                if (scope === "midi-qol" && key === "AutoRemoveTargets") return options.midiAutoRemoveTargets;
+                return undefined;
             }
         },
         i18n: {
@@ -213,6 +230,8 @@ function installGlobals(options: InstallOptions = {}) {
         member,
         offside,
         combat: (globalThis.game as { combat: unknown }).combat,
+        targetedTokens,
+        targetToken,
         getUpdateCombatHandler() {
             const entries = (globalThis.Hooks as ReturnType<typeof createHooks>).events["updateCombat"] ?? [];
             return entries[0]?.fn;
@@ -590,6 +609,41 @@ test("CPR bridge awaits each workflow before the next so slow macros never inter
         // Each macro must fully complete (start + end) before the next begins —
         // this is what stops concurrent midi-qol workflows from clobbering targets.
         assert.deepEqual(log, ["start commander", "end commander", "start member", "end member"]);
+    } finally {
+        env.restore();
+    }
+});
+
+test("CPR bridge clears the GM's targets after turnEnd when midi-qol auto-untarget is on", async () => {
+    const env = installGlobals({
+        midiAutoRemoveTargets: "all",
+        templates: [HUNGER_TEMPLATE(["commander", "member"])]
+    });
+    // Simulate the bridge's workflows having left tokens targeted.
+    env.targetToken("commander");
+    env.targetToken("member");
+    try {
+        registerChrisPremadesIntegration();
+        await env.emitSideTurnEnd("players");
+
+        // Auto-untarget honored: no targets left after the turnEnd batch.
+        assert.equal(env.targetedTokens.size, 0);
+    } finally {
+        env.restore();
+    }
+});
+
+test("CPR bridge leaves targets alone after turnEnd when midi-qol auto-untarget is off", async () => {
+    const env = installGlobals({
+        midiAutoRemoveTargets: "none",
+        templates: [HUNGER_TEMPLATE(["commander", "member"])]
+    });
+    env.targetToken("member");
+    try {
+        registerChrisPremadesIntegration();
+        await env.emitSideTurnEnd("players");
+
+        assert.equal(env.targetedTokens.size, 1);
     } finally {
         env.restore();
     }

@@ -1,5 +1,5 @@
 import { getCombatantsForSide, isSideCombat } from "../logic.js";
-import { hooks, isPrimaryGMClient } from "../runtime.js";
+import { getSetting, hooks, isPrimaryGMClient } from "../runtime.js";
 import type { CombatLike, CombatantLike, SideTurnPayload, TokenLike } from "../types.js";
 
 /**
@@ -385,6 +385,29 @@ export async function flushCprBridge(): Promise<void> {
     await workflowChain.catch(() => undefined);
 }
 
+/**
+ * Whether midi-qol's "auto untarget at end of turn" is active for this client.
+ * Matches the gate in midi-qol's `untargetAllTokens` (utils.ts): a GM client with
+ * `AutoRemoveTargets` set to `all`/`allGM` (midi-qol normalizes `allGM`→`all` for
+ * GMs). The bridge runs on the primary GM.
+ */
+function autoUntargetEnabled(): boolean {
+    const setting = getSetting("midi-qol", "AutoRemoveTargets");
+    return Boolean(game?.user?.isGM) && (setting === "all" || setting === "allGM");
+}
+
+/**
+ * Release the current client's targets (the visual reticle + `game.user.targets`),
+ * the same way midi-qol's `untargetAllTokens` does.
+ */
+function clearUserTargets(): void {
+    const targets = (game as { user?: { targets?: Set<{ setTarget?(state: boolean, options?: { releaseOthers?: boolean }): unknown }> } } | null)?.user?.targets;
+    if (!targets) return;
+    for (const token of Array.from(targets)) {
+        token.setTarget?.(false, { releaseOthers: false });
+    }
+}
+
 async function firePassesForSide(combat: CombatLike, sideId: string, passes: readonly TurnPass[]): Promise<void> {
     const current = getCombatTurnRef(combat, "current");
     const previous = getCombatTurnRef(combat, "previous");
@@ -412,6 +435,16 @@ async function firePassesForSide(combat: CombatLike, sideId: string, passes: rea
             // (rolls + damage) has completed.
             await invokeTriggers(triggers, combatantId, placeableId);
         }
+    }
+
+    // The bridge's workflows re-target each token via `targetUuids`, which leaves
+    // the last one targeted and so defeats midi-qol's "auto untarget at end of
+    // turn" (which fired on the turn-advancing `combat.update` mid-batch). With the
+    // setting on, release the targets once the turnEnd batch is done so the end-of
+    // -turn state is clean, matching what midi-qol would have left.
+    if (passes.includes("turnEnd") && autoUntargetEnabled()) {
+        clearUserTargets();
+        debug("cleared user targets after turnEnd (midi-qol AutoRemoveTargets)");
     }
 }
 

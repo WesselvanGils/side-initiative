@@ -2,7 +2,7 @@
 
 ### 🐛 Bug Fixes
 
-- *(chris-premades)* Make area triggers (Hunger of Hadar, Wall of Fire, …) affect every token on the active side: suppress CPR's native `updateCombat` for side combats and bridge `turnStart`/`turnEnd`/`everyTurn` to all side tokens through a serialized queue, so concurrent midi-qol workflows no longer clobber the target selection (commander no longer absorbs others' damage)
+- *(chris-premades)* Make area triggers (Hunger of Hadar, Wall of Fire, …) affect every token on the active side: suppress CPR's native `updateCombat` for side combats and bridge `turnStart`/`turnEnd`/`everyTurn` to all side tokens through a serialized queue, so concurrent midi-qol workflows no longer clobber the target selection (commander no longer absorbs others' damage); also clear the GM's targets after the turnEnd batch when midi-qol's auto-untarget-at-end-of-turn is enabled, so the bridge doesn't defeat that setting
 - *(gambits)* Scope the OA turn-guard override so it cannot leak
 ## [1.1.0] - 2026-06-19
 
