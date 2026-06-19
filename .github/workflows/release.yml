@@ -39,6 +39,9 @@ jobs:
       - name: Run tests
         run: npm test
 
+      - name: Build module
+        run: npm run build
+
       - name: Build release bundle
         run: npm run release:build -- "${RELEASE_TAG}"
 

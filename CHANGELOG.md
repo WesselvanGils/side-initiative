@@ -1,5 +1,14 @@
 ## [unreleased]
 
+### 🚀 Features
+
+- Bridge side initiative turn events to Gambits Premades region behaviors for every combatant on the active side
+- Support Gambits Premades 2.1.42 and 2.1.43 Opportunity Attack builds
+
+### ♻️ Refactor
+
+- Rewrite the module in TypeScript with full Foundry V13 type definitions (src/ → scripts/ build)
+
 ### 🐛 Bug Fixes
 
 - CI/CD again

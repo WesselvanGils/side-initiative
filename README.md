@@ -27,10 +27,11 @@ Commander changes default to side owners and can be restricted to the GM in the 
 
 - This module uses `midi-qol.preSetReactionUsed` to suppress reaction consumption for actors on the active side.
 - Used reactions are cleared again when a side becomes active so characters regain reaction access on their next turn.
+- Start of turn and end of turn triggers need special attention because when a side starts their collective turn this doesn't proc individual actors.
 
 ## Gambits Premades notes
 
-- Side Initiative patches Gambits Premades Opportunity Attack at runtime for the supported Gambits versions `2.1.43`.
+- Side Initiative patches Gambits Premades Opportunity Attack at runtime for the supported Gambits versions.
 - The patch is guarded: if the installed Gambits version or source shape does not match the supported build, integration is disabled internally and the GM is warned.
 - Side-turn hooks are bridged to Gambits region turn events for every combatant on the active side, not just the commander.
 - The active side's tokens keep their OA region enabled while their side is active so the side can still make opportunity attacks during that phase.
@@ -38,16 +39,31 @@ Commander changes default to side owners and can be restricted to the GM in the 
 
 ## Development
 
-Setup your environment by creating a `foundry-config.yaml` with:
-```yml
-installPath: "/path/to/your/foundry/installation"
-```
-And then running:
+The module is written in TypeScript under `src/` and compiled to `scripts/`,
+which is the bundle Foundry loads. Build it with:
+
 ```bash
-npm run createSymlinks
+npm run build         # one-shot compile src/ -> scripts/
+npm run build:watch   # recompile on save
+npm run typecheck     # type-check without emitting
 ```
 
-Run the logic tests with:
+To develop against a local Foundry install, point `foundry-config.yaml` at your
+Foundry user data directory (the folder that contains `Data/`):
+
+```yml
+dataPath: "/path/to/FoundryVTT"
+```
+
+```bash
+npm run build
+npm run createSymlinks   # symlinks the repo into <dataPath>/Data/modules/side-initiative
+```
+
+Re-run `npm run build` (or keep `build:watch` running) after changing source so
+Foundry picks up the new `scripts/` output.
+
+The logic and integration tests run against `src/` via `tsx`:
 
 ```bash
 npm test
