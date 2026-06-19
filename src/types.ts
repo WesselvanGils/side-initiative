@@ -66,6 +66,8 @@ export interface ActorLike extends Flaggable {
     /** dnd5e system data is accessed dynamically (xp weighting, etc.). */
     system?: Record<string, any>;
     getActiveTokens?(): Array<{ combatant?: CombatantLike | null } | null | undefined>;
+    effects?: { get?(id: string): { delete?(): Promise<unknown> | unknown } | null | undefined; [key: string]: any };
+    update?(data: Record<string, unknown>): Promise<unknown>;
 }
 
 /**
@@ -96,6 +98,7 @@ export interface CombatantLike extends Flaggable {
     isOwner?: boolean;
     actor?: ActorLike | null;
     token?: TokenLike | null;
+    tokenDocument?: TokenLike | null;
     document?: Record<string, any> & { actor?: ActorLike | null; token?: TokenLike | null; disposition?: number };
     group?: { members: Set<CombatantLike> | CombatantLike[] } | null;
     testUserPermission?(user: unknown, permission: string): boolean;
@@ -187,3 +190,11 @@ export interface SideRollResult {
 
 /** A function that produces a pseudo-random number in [0, 1). */
 export type RandomFn = () => number;
+
+/** Structural subset of a Foundry {@link User}. */
+export interface UserLike {
+    id?: string;
+    isGM?: boolean;
+    active?: boolean;
+    color?: string;
+}
