@@ -23,6 +23,10 @@
 ### 📚 Documentation
 
 - Document the TypeScript workflow and finalize tooling
+
+### ⚙️ Miscellaneous Tasks
+
+- Updated changelog
 ## [1.0.7] - 2026-06-14
 
 ### 🐛 Bug Fixes
