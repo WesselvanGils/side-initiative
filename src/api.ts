@@ -123,7 +123,25 @@ async function syncCombatToSide(
     return state;
 }
 
-function emitSideTurnEndHook(combat: CombatLike | null | undefined, sideId: string | null | undefined, nextSideId: string | null | undefined): void {
+/**
+ * Async work that must complete during a side's turn-end BEFORE the turn
+ * advances. Advancing fires Foundry's `updateCombat`, which midi-qol uses to
+ * auto-untarget at end of turn — if that runs while an integration's turn-end
+ * workflows are still mid-flight, targets get cleared before damage resolves and
+ * tokens miss damage. Integrations register a flusher; `emitSideTurnEndHook`
+ * awaits them all before returning.
+ */
+const sideTurnEndFlushers: Array<() => Promise<unknown>> = [];
+
+export function registerSideTurnEndFlusher(flusher: () => Promise<unknown>): void {
+    if (!sideTurnEndFlushers.includes(flusher)) sideTurnEndFlushers.push(flusher);
+}
+
+export function clearSideTurnEndFlushers(): void {
+    sideTurnEndFlushers.length = 0;
+}
+
+async function emitSideTurnEndHook(combat: CombatLike | null | undefined, sideId: string | null | undefined, nextSideId: string | null | undefined): Promise<void> {
     if (!sideId) return;
     const payload: SideTurnPayload = {
         combat,
@@ -131,6 +149,9 @@ function emitSideTurnEndHook(combat: CombatLike | null | undefined, sideId: stri
         nextSideId: nextSideId ? normalizeSideId(nextSideId) : null
     };
     hooks()?.callAll("side-initiative.sideTurnEnd", payload);
+    if (sideTurnEndFlushers.length) {
+        await Promise.all(sideTurnEndFlushers.map((flusher) => Promise.resolve(flusher()).catch(() => undefined)));
+    }
 }
 
 function emitSideTurnStartHook(combat: CombatLike | null | undefined, sideId: string | null | undefined, previousSideId: string | null | undefined): void {
@@ -513,7 +534,7 @@ export const SideInitiativeAPI: SideInitiativeApi = {
             return state;
         }
 
-        emitSideTurnEndHook(resolvedCombat, previousSideId, normalizedSideId);
+        await emitSideTurnEndHook(resolvedCombat, previousSideId, normalizedSideId);
         const state = getCombatState(resolvedCombat);
         state.activeSideId = normalizedSideId;
         state.activeSideIndex = Math.max(0, getOrderedSideIds(resolvedCombat).indexOf(normalizedSideId));
@@ -532,7 +553,7 @@ export const SideInitiativeAPI: SideInitiativeApi = {
         if (!nextSideId) return null;
         const ordered = getOrderedSideIds(resolvedCombat);
         const roundDelta = getNextRoundDelta(currentSideId, nextSideId, direction, ordered);
-        emitSideTurnEndHook(resolvedCombat, currentSideId, nextSideId);
+        await emitSideTurnEndHook(resolvedCombat, currentSideId, nextSideId);
         const state = getCombatState(resolvedCombat);
         state.activeSideId = nextSideId;
         state.activeSideIndex = Math.max(0, ordered.indexOf(nextSideId));

@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { SideInitiativeAPI } from "../src/api.js";
+import { clearSideTurnEndFlushers, registerSideTurnEndFlusher, SideInitiativeAPI } from "../src/api.js";
 import {
     defaultSideIdForCombatant,
     ensureCombatantSideAssignments,
@@ -433,6 +433,54 @@ test("advanceSide emits side turn lifecycle hooks and setActiveSide does not re-
     } finally {
         globalThis.Hooks = originalHooks;
         combat.setFlag = originalSetFlag;
+        combat.update = originalUpdate;
+    }
+});
+
+test("advanceSide awaits sideTurnEnd flushers before the turn advances (combat.update)", async () => {
+    const p1 = createCombatant({ id: "pc-1", hasPlayerOwner: true, disposition: 1 });
+    const m1 = createCombatant({ id: "npc-1", hasPlayerOwner: false, disposition: -1 });
+    const combat = createCombat(
+        [p1, m1],
+        {
+            activeSideId: "players",
+            order: ["players", "monsters"],
+            sides: {
+                players: { id: "players", combatantIds: ["pc-1"] },
+                monsters: { id: "monsters", combatantIds: ["npc-1"] }
+            }
+        },
+        [p1, m1]
+    );
+
+    const events: string[] = [];
+    const originalHooks = globalThis.Hooks;
+    const originalUpdate = combat.update.bind(combat);
+    globalThis.Hooks = { callAll(name: string) { events.push(`hook:${name}`); } };
+    combat.update = async function update(data) {
+        events.push("combat.update");
+        return originalUpdate(data);
+    };
+
+    const flusher = async () => {
+        await new Promise((resolve) => setTimeout(resolve, 5));
+        events.push("flusher-done");
+    };
+    registerSideTurnEndFlusher(flusher);
+
+    try {
+        await SideInitiativeAPI.advanceSide(combat, 1);
+
+        // The flusher must finish before combat.update fires — end-of-turn work
+        // (e.g. the CPR bridge's turnEnd workflows) has to complete before the
+        // advancing update triggers midi-qol's end-of-turn auto-untarget.
+        const flusherAt = events.indexOf("flusher-done");
+        const updateAt = events.indexOf("combat.update");
+        assert.notEqual(flusherAt, -1, "flusher was not awaited");
+        assert.ok(flusherAt < updateAt, `expected flusher-done before combat.update, got [${events.join(", ")}]`);
+    } finally {
+        clearSideTurnEndFlushers();
+        globalThis.Hooks = originalHooks;
         combat.update = originalUpdate;
     }
 });
