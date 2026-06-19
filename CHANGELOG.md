@@ -1,9 +1,28 @@
 ## [unreleased]
 
+### 🚀 Features
+
+- Chris' premades (CPR) integration
+
 ### 🐛 Bug Fixes
 
-- *(chris-premades)* Make area triggers (Hunger of Hadar, Wall of Fire, …) affect every token on the active side: suppress CPR's native `updateCombat` for side combats and bridge `turnStart`/`turnEnd`/`everyTurn` to all side tokens through a serialized queue, so concurrent midi-qol workflows no longer clobber the target selection (commander no longer absorbs others' damage). The turn-end batch is awaited before the turn advances (new `registerSideTurnEndFlusher` API), so midi-qol's end-of-turn auto-untarget no longer clears targets mid-workflow and drops the first token's damage
+- Resolved serveral issues related to CPR
+- Template behavior for cauldron of plentiful resources integration
+- Midi-qol auto-untarget at end of turn being incompatible
+- Midi-qol auto-untarget again
+
+### ⚙️ Miscellaneous Tasks
+
+- Added temporary logging to inspect CPR issues
+## [1.1.1] - 2026-06-19
+
+### 🐛 Bug Fixes
+
 - *(gambits)* Scope the OA turn-guard override so it cannot leak
+
+### 📚 Documentation
+
+- *(changelog)* Update changelog
 ## [1.1.0] - 2026-06-19
 
 ### 🐛 Bug Fixes
