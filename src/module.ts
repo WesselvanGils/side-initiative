@@ -1,6 +1,7 @@
 import { COMMANDER_CONTROL_OPTIONS, INITIATIVE_METHOD_OPTIONS, MODULE_ID, SETTINGS, SOCKET_EVENT } from "./constants.js";
 import { SideInitiativeAPI, handleCommanderSocketRequest } from "./api.js";
 import { installCombatPatches } from "./controller/combat-controller.js";
+import { registerChrisPremadesIntegration } from "./integration/chris-premades.js";
 import { registerGambitsPremadesIntegration } from "./integration/gambits-premades.js";
 import { registerMidiQolIntegration } from "./integration/midi-qol.js";
 import { addCombatantContextOptions, renderCombatTracker } from "./ui/tracker.js";
@@ -132,6 +133,9 @@ Hooks.once("ready", () => {
         getSideInitiative()?.refreshCombatantSides?.(game.combat as CombatLike);
     }
     registerGambitsPremadesIntegration();
+    if (game?.modules?.get?.("chris-premades")?.active) {
+        registerChrisPremadesIntegration();
+    }
     if (game?.modules?.get?.("midi-qol")?.active) {
         registerMidiQolIntegration();
     }
