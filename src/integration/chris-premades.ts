@@ -1,6 +1,17 @@
-import { getCombatantSideId, getCombatantsForSide, isSideCombat, normalizeSideId } from "../logic.js";
+import { getCombatantSideId, getCombatantsForSide, getSideCommanderCombatant, isSideCombat, normalizeSideId } from "../logic.js";
 import { hooks, isPrimaryGMClient } from "../runtime.js";
 import type { CombatLike, CombatantLike, SideTurnPayload, TokenLike } from "../types.js";
+
+/**
+ * Opt-in bridge diagnostics. In the Foundry console (F12) run
+ * `globalThis.SIDE_INITIATIVE_DEBUG_CPR = true` then reproduce to trace which
+ * combatants are processed/skipped and which token each macro targets. The bridge
+ * runs only on side turns, so this is not noisy.
+ */
+function debug(...parts: unknown[]): void {
+    if (!(globalThis as { SIDE_INITIATIVE_DEBUG_CPR?: boolean }).SIDE_INITIATIVE_DEBUG_CPR) return;
+    console.log("[side-initiative/cpr]", ...parts);
+}
 
 /**
  * Chris' Premades (CPR) compatibility bridge.
@@ -314,11 +325,15 @@ function collectTriggersForToken(tokenDocument: TokenLike | null | undefined, to
     return dedupeAndSort(candidates);
 }
 
-async function invokeTriggers(triggers: SortedTrigger[]): Promise<void> {
+async function invokeTriggers(triggers: SortedTrigger[], ownerCombatantId: string | null = null, ownerPlaceableId: string | null = null): Promise<void> {
     for (const trigger of triggers) {
+        const triggerToken = trigger.token as { id?: string; uuid?: string; document?: { uuid?: string } } | null;
+        const targetId = triggerToken?.id ?? triggerToken?.document?.uuid ?? triggerToken?.uuid ?? null;
+        debug(`    -> macro=${trigger.macroName} owner=${ownerCombatantId} ownerPlaceable=${ownerPlaceableId} trigger.token.id=${targetId}`);
         try {
             await trigger.macro({ trigger });
         } catch (error) {
+            debug(`    !! macro=${trigger.macroName} threw:`, error);
             console?.error?.(error);
         }
     }
@@ -329,20 +344,32 @@ function getCombatTurnRef(combat: CombatLike | null | undefined, key: "current" 
     return ref && typeof ref === "object" ? (ref as CombatTurnRef) : null;
 }
 
+/**
+ * Resolve a combatant's token placeable (the object CPR macros target via
+ * `token.document.uuid`). Prefer the document's `.object`; fall back to the
+ * canvas placeable, then the document itself. Returns `[document, placeable]`.
+ */
+function resolveCombatantToken(combatant: CombatantLike | null | undefined): { document: TokenLike | null; placeable: unknown } {
+    const tokenDocument = combatant?.token ?? combatant?.tokenDocument ?? null;
+    const canvasTokens = (globalThis as { canvas?: { tokens?: { get?(id: string): unknown } } }).canvas?.tokens;
+    const placeable = tokenDocument?.object ?? canvasTokens?.get?.(tokenDocument?.id ?? "") ?? tokenDocument;
+    return { document: tokenDocument, placeable };
+}
+
 async function bridgeSideTurn(payload: SideTurnPayload, pass: TurnPass): Promise<void> {
     if (!isPrimaryGMClient()) return;
     const combat = payload?.combat ?? null;
     const sideId = payload?.sideId ?? null;
     if (!combat || !sideId || !validateCprShape()) return;
 
-    // The bridge always fires for the side that is `combat.current` at emit time:
-    // `sideTurnEnd` is emitted BEFORE the turn advances (the ending side is still
-    // current), and `sideTurnStart` is emitted AFTER (the starting side is now
-    // current). CPR fires the native pass for that side's commander in both cases,
-    // so skip that commander to avoid double-processing it. Match by
-    // `combat.current.combatantId` — the field CPR itself uses (combat.js); the
-    // `tokenId` field is not reliably present across Foundry versions.
-    const skipCombatantId = getCombatTurnRef(combat, "current")?.combatantId ?? null;
+    // The bridge always fires for the side whose turn is starting/ending. CPR fires
+    // the native pass for that side's commander, so skip the commander to avoid
+    // double-processing. Resolve the commander from side-initiative's own state
+    // (`getSideCommanderCombatant`) — deterministic and immune to `combat.current`
+    // timing around the `combat.update` in `syncCombatToSide`. Fall back to
+    // `combat.current.combatantId` (the field CPR uses) if no commander is set.
+    const commander = getSideCommanderCombatant(combat, sideId);
+    const skipCombatantId = commander?.id ?? getCombatTurnRef(combat, "current")?.combatantId ?? null;
 
     const current = getCombatTurnRef(combat, "current");
     const previous = getCombatTurnRef(combat, "previous");
@@ -353,16 +380,30 @@ async function bridgeSideTurn(payload: SideTurnPayload, pass: TurnPass): Promise
         previousRound: previous?.round ?? -1
     };
 
+    debug(`${pass} side=${sideId} skipCombatant=${skipCombatantId} current.combatantId=${current?.combatantId ?? null}`);
+
     for (const combatant of getCombatantsForSide(combat, sideId, { includeDefeated: false })) {
-        const tokenDocument = combatant.token ?? null;
-        const tokenPlaceable = tokenDocument?.object ?? tokenDocument;
+        const { document: tokenDocument, placeable: tokenPlaceable } = resolveCombatantToken(combatant);
         const combatantId = combatant?.id ?? null;
-        if (!tokenPlaceable || (skipCombatantId && combatantId === skipCombatantId)) continue;
+        const placeableId = (tokenPlaceable as { id?: string } | null)?.id ?? null;
+        const documentId = tokenDocument?.id ?? null;
+        if (!tokenPlaceable) {
+            debug(`  combatant=${combatantId} SKIP (no token placeable; documentId=${documentId})`);
+            continue;
+        }
+        if (skipCombatantId && combatantId === skipCombatantId) {
+            debug(`  combatant=${combatantId} SKIP (commander; placeable=${placeableId})`);
+            continue;
+        }
 
         const triggers = collectTriggersForToken(tokenDocument, tokenPlaceable, pass, details);
-        if (triggers.length === 0) continue;
+        if (triggers.length === 0) {
+            debug(`  combatant=${combatantId} placeable=${placeableId} no triggers`);
+            continue;
+        }
+        debug(`  combatant=${combatantId} placeable=${placeableId} firing ${triggers.length} trigger(s) targeting this token`);
         // Await sequentially — macros mutate world state and create workflows.
-        await invokeTriggers(triggers);
+        await invokeTriggers(triggers, combatantId, placeableId);
     }
 }
 
@@ -433,7 +474,11 @@ function wrapCprUpdateCombat(): boolean {
 
         const original = fn as (...args: unknown[]) => unknown;
         const wrapped = async function cprUpdateCombatGuard(this: unknown, combat: unknown, ...rest: unknown[]): Promise<unknown> {
-            if (shouldSuppressCprUpdateCombat(combat as CombatLike | null)) return undefined;
+            if (shouldSuppressCprUpdateCombat(combat as CombatLike | null)) {
+                debug(`CPR updateCombat SUPPRESSED (within-side switch) prev=${getCombatTurnRef(combat as CombatLike | null, "previous")?.combatantId ?? null} cur=${getCombatTurnRef(combat as CombatLike | null, "current")?.combatantId ?? null}`);
+                return undefined;
+            }
+            debug(`CPR updateCombat native (cross-side/round) prev=${getCombatTurnRef(combat as CombatLike | null, "previous")?.combatantId ?? null} cur=${getCombatTurnRef(combat as CombatLike | null, "current")?.combatantId ?? null}`);
             return original.call(this, combat, ...rest);
         };
         if (typeof entry === "function") {
