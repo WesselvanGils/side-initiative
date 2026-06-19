@@ -1,6 +1,6 @@
-import { getCombatantsForSide } from "../logic.js";
+import { getCombatantSideId, getCombatantsForSide, isSideCombat, normalizeSideId } from "../logic.js";
 import { hooks, isPrimaryGMClient } from "../runtime.js";
-import type { CombatLike, SideTurnPayload, TokenLike } from "../types.js";
+import type { CombatLike, CombatantLike, SideTurnPayload, TokenLike } from "../types.js";
 
 /**
  * Chris' Premades (CPR) compatibility bridge.
@@ -13,13 +13,22 @@ import type { CombatLike, SideTurnPayload, TokenLike } from "../types.js";
  * side-initiative the current combatant is the side's commander, so every other
  * token on the side silently misses those passes and never takes the damage.
  *
- * CPR does not expose its dispatch on `globalThis.chrisPremades`, but it does
- * expose the macro objects (`chrisPremades.macros.<name>`, each with a
- * `.template`/`.region` array of `{pass, macro, priority}`) and
- * `chrisPremades.utils.templateUtils.getTemplatesInToken`. This bridge reuses
- * those public surfaces to fire the missing `turnStart`/`turnEnd` passes for the
- * non-commander tokens on the active side — mirroring how the Gambits bridge
- * reuses Gambits' stored region scripts.
+ * Two mechanisms fix this:
+ *
+ * 1. Side-turn bridge: on `side-initiative.sideTurnStart`/`sideTurnEnd`, fire the
+ *    CPR `turnStart`/`turnEnd` passes for every NON-commander token on the active
+ *    side. CPR fires the commander's natively, so it is skipped (by
+ *    `combat.current.combatantId`, the field CPR itself uses). CPR does not expose
+ *    its dispatch on `globalThis.chrisPremades`, so this reuses the public macro
+ *    objects (`chrisPremades.macros.<name>`) and `templateUtils.getTemplatesInToken`.
+ *
+ * 2. Update-combat wrap: side-initiative advances `combat.turn` both on real side
+ *    advances AND when switching the commander (see `syncCombatToSide`). CPR cannot
+ *    tell those apart and would fire spurious `turnEnd`(old)/`turnStart`(new) on a
+ *    mere commander switch. We wrap CPR's `updateCombat` hook handler to suppress it
+ *    when the turn change stays WITHIN one side (a commander switch); real
+ *    cross-side advances still dispatch natively (commander only) and the bridge
+ *    covers the rest.
  *
  * Movement-based passes (`enter`/`left`) are driven by CPR's own movement events
  * and are unaffected, so they are intentionally not bridged here.
@@ -54,6 +63,7 @@ interface CprApi {
 
 interface CombatTurnRef {
     tokenId?: string | null;
+    combatantId?: string | null;
     turn?: number;
     round?: number;
 }
@@ -91,6 +101,9 @@ interface ChrisPremadesIntegrationState {
     reason: string | null;
     warnedKeys: Set<string>;
     bridgeRegistered: boolean;
+    updateCombatWrapped: boolean;
+    originalUpdateCombat: ((...args: unknown[]) => unknown) | null;
+    wrappedUpdateCombat: ((...args: unknown[]) => unknown) | null;
 }
 
 const integrationState: ChrisPremadesIntegrationState = {
@@ -98,7 +111,10 @@ const integrationState: ChrisPremadesIntegrationState = {
     version: null,
     reason: null,
     warnedKeys: new Set(),
-    bridgeRegistered: false
+    bridgeRegistered: false,
+    updateCombatWrapped: false,
+    originalUpdateCombat: null,
+    wrappedUpdateCombat: null
 };
 
 function getCprModule(): { active?: boolean; version?: string; data?: { version?: string } } | null {
@@ -143,6 +159,9 @@ export function resetCprPremadesIntegrationState(): void {
     integrationState.reason = null;
     integrationState.warnedKeys.clear();
     integrationState.bridgeRegistered = false;
+    integrationState.updateCombatWrapped = false;
+    integrationState.originalUpdateCombat = null;
+    integrationState.wrappedUpdateCombat = null;
 }
 
 function warnOnce(key: string, message: string): void {
@@ -320,9 +339,10 @@ async function bridgeSideTurn(payload: SideTurnPayload, pass: TurnPass): Promise
     // `sideTurnEnd` is emitted BEFORE the turn advances (the ending side is still
     // current), and `sideTurnStart` is emitted AFTER (the starting side is now
     // current). CPR fires the native pass for that side's commander in both cases,
-    // so skip `combat.current.tokenId` to avoid double-processing it. This is also
-    // robust to mid-mutation state (more so than re-deriving the side rep).
-    const skipTokenId = getCombatTurnRef(combat, "current")?.tokenId ?? null;
+    // so skip that commander to avoid double-processing it. Match by
+    // `combat.current.combatantId` — the field CPR itself uses (combat.js); the
+    // `tokenId` field is not reliably present across Foundry versions.
+    const skipCombatantId = getCombatTurnRef(combat, "current")?.combatantId ?? null;
 
     const current = getCombatTurnRef(combat, "current");
     const previous = getCombatTurnRef(combat, "previous");
@@ -336,8 +356,8 @@ async function bridgeSideTurn(payload: SideTurnPayload, pass: TurnPass): Promise
     for (const combatant of getCombatantsForSide(combat, sideId, { includeDefeated: false })) {
         const tokenDocument = combatant.token ?? null;
         const tokenPlaceable = tokenDocument?.object ?? tokenDocument;
-        const tokenId = tokenDocument?.id ?? null;
-        if (!tokenPlaceable || (skipTokenId && tokenId === skipTokenId)) continue;
+        const combatantId = combatant?.id ?? null;
+        if (!tokenPlaceable || (skipCombatantId && combatantId === skipCombatantId)) continue;
 
         const triggers = collectTriggersForToken(tokenDocument, tokenPlaceable, pass, details);
         if (triggers.length === 0) continue;
@@ -354,6 +374,82 @@ function registerSideTurnBridge(): void {
 }
 
 /**
+ * Distinctive string literals in CPR's `combatEvents.updateCombat` (combat.js).
+ * Used to locate the handler in the Foundry hook registry by source shape so the
+ * wrap survives CPR refactors as long as those dispatch passes keep their names.
+ * Comparison is whitespace-insensitive (matches authored and bundled source).
+ */
+const CPR_UPDATE_COMBAT_MARKERS = ["turnStartSource", "turnEndSource", "turnStartNear", "everyTurn"];
+
+function squashWhitespace(value: string): string {
+    return value.replace(/\s+/g, "");
+}
+
+function isCprUpdateCombatSource(fn: unknown): boolean {
+    if (typeof fn !== "function") return false;
+    const source = squashWhitespace(Function.prototype.toString.call(fn));
+    return CPR_UPDATE_COMBAT_MARKERS.every((marker) => source.includes(marker));
+}
+
+/**
+ * Whether a CPR `updateCombat` dispatch should be suppressed for this combat.
+ * Suppress only when the turn change stays WITHIN a single side of a
+ * side-initiative combat — i.e. a commander switch via `syncCombatToSide`, which
+ * CPR cannot distinguish from a real turn advance and would mis-handle as a
+ * `turnEnd`(old commander)/`turnStart`(new commander) pair. Real cross-side
+ * advances (and the first turn, where there is no previous) dispatch natively,
+ * and the side-turn bridge covers the non-commander tokens.
+ */
+function shouldSuppressCprUpdateCombat(combat: CombatLike | null | undefined): boolean {
+    if (!isSideCombat(combat)) return false;
+    const previousId = getCombatTurnRef(combat, "previous")?.combatantId ?? null;
+    const currentId = getCombatTurnRef(combat, "current")?.combatantId ?? null;
+    if (!previousId || !currentId) return false;
+    const collection = combat?.combatants as { get?(id: string): CombatantLike | null | undefined } | undefined;
+    const previous = collection?.get?.call(combat?.combatants, previousId) ?? null;
+    const current = collection?.get?.call(combat?.combatants, currentId) ?? null;
+    if (!previous || !current) return false;
+    return normalizeSideId(getCombatantSideId(previous)) === normalizeSideId(getCombatantSideId(current));
+}
+
+/**
+ * Locate CPR's `updateCombat` hook handler in the Foundry registry and wrap it so
+ * within-side turn changes are suppressed. The handler is found by source shape
+ * (mirroring the Gambits OA source-marker approach) and wrapped in place by
+ * mutating the registered `HookedFunction`'s `fn`. Idempotent. Returns false if
+ * the handler cannot be found (e.g. CPR loaded later) — the side-turn bridge still
+ * works without it; only the commander-switch dedup is lost.
+ */
+function wrapCprUpdateCombat(): boolean {
+    if (integrationState.updateCombatWrapped) return true;
+    const events = (globalThis as unknown as { Hooks?: { events?: Record<string, unknown[]> } }).Hooks?.events;
+    const list = events?.["updateCombat"];
+    if (!Array.isArray(list)) return false;
+
+    for (let index = 0; index < list.length; index++) {
+        const entry = list[index];
+        const fn = typeof entry === "function" ? entry : (entry as { fn?: unknown })?.fn;
+        if (!isCprUpdateCombatSource(fn)) continue;
+
+        const original = fn as (...args: unknown[]) => unknown;
+        const wrapped = async function cprUpdateCombatGuard(this: unknown, combat: unknown, ...rest: unknown[]): Promise<unknown> {
+            if (shouldSuppressCprUpdateCombat(combat as CombatLike | null)) return undefined;
+            return original.call(this, combat, ...rest);
+        };
+        if (typeof entry === "function") {
+            list[index] = wrapped;
+        } else {
+            (entry as { fn: (...args: unknown[]) => unknown }).fn = wrapped;
+        }
+        integrationState.originalUpdateCombat = original;
+        integrationState.wrappedUpdateCombat = wrapped;
+        integrationState.updateCombatWrapped = true;
+        return true;
+    }
+    return false;
+}
+
+/**
  * Register the Chris' Premades compatibility bridge: fire CPR `turnStart`/
  * `turnEnd` template and region macro passes for every non-commander token on the
  * active side so area spells (Hunger of Hadar, Wall of Fire, ...) affect all
@@ -364,6 +460,7 @@ export function registerChrisPremadesIntegration(): void {
 
     integrationState.version = getCprPremadesVersion();
     registerSideTurnBridge();
+    wrapCprUpdateCombat();
 
     if (validateCprShape()) {
         integrationState.status = "active";
@@ -371,12 +468,13 @@ export function registerChrisPremadesIntegration(): void {
         return;
     }
 
-    // CPR populates `globalThis.chrisPremades` during its own ready (`cprReady`),
-    // which may run after this module's ready. The bridge re-checks the shape on
-    // every fire, so this only reports status accurately once CPR is available.
+    // CPR populates `globalThis.chrisPremades` and registers its hooks during its
+    // own ready (`cprReady`), which may run after this module's ready. Retry the
+    // wrap then; the bridge re-checks the API shape on every fire regardless.
     integrationState.status = "inactive";
     integrationState.reason = "Chris' Premades API not yet available.";
     hooks()?.once("cprReady", () => {
+        wrapCprUpdateCombat();
         if (validateCprShape()) {
             integrationState.status = "active";
             integrationState.reason = null;

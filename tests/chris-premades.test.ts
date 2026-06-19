@@ -9,18 +9,19 @@ import {
 } from "../src/integration/chris-premades.js";
 
 function createHooks() {
-    const registry = new Map();
+    // Model Foundry's Hooks: events[name] is an array of {fn, once} entries, so
+    // the updateCombat wrap can locate and mutate a handler's `fn` in place.
+    const events: Record<string, Array<{ fn: (...args: unknown[]) => unknown; once: boolean }>> = {};
     return {
-        on(name, handler) {
-            if (!registry.has(name)) registry.set(name, []);
-            registry.get(name).push(handler);
+        events,
+        on(name: string, handler: (...args: unknown[]) => unknown) {
+            (events[name] ??= []).push({ fn: handler, once: false });
         },
-        once(name, handler) {
-            if (!registry.has(name)) registry.set(name, []);
-            registry.get(name).push(handler);
+        once(name: string, handler: (...args: unknown[]) => unknown) {
+            (events[name] ??= []).push({ fn: handler, once: true });
         },
-        get(name) {
-            return registry.get(name) ?? [];
+        get(name: string) {
+            return (events[name] ?? []).map((entry) => entry.fn);
         }
     };
 }
@@ -43,9 +44,13 @@ interface InstallOptions {
     primaryGM?: string;
     currentTokenId?: string | null;
     previousTokenId?: string | null;
+    currentCombatantId?: string | null;
+    previousCombatantId?: string | null;
     templates?: TemplateFixture[];
     templateUtils?: unknown;
     macros?: Record<string, unknown>;
+    sideCombat?: boolean;
+    cprUpdateCombat?: (...args: unknown[]) => unknown;
     extraCombatants?: Array<{ id: string; sideId: string; tokenId: string; defeated?: boolean; regions?: Set<unknown> }>;
 }
 
@@ -56,6 +61,9 @@ function installGlobals(options: InstallOptions = {}) {
         primaryGM = "gm-1",
         currentTokenId = "commander",
         previousTokenId = "commander",
+        currentCombatantId = "combatant-commander",
+        previousCombatantId = "combatant-commander",
+        sideCombat = true,
         templates = [],
         extraCombatants = []
     } = options;
@@ -120,7 +128,7 @@ function installGlobals(options: InstallOptions = {}) {
             actor: token.actor,
             defeated,
             getFlag(scope: string, key: string) {
-                if (scope === "side-initiative" && key === "sideId") return sideId;
+                if (sideCombat && scope === "side-initiative" && key === "sideId") return sideId;
                 return null;
             }
         };
@@ -130,11 +138,12 @@ function installGlobals(options: InstallOptions = {}) {
         createCombatant("combatant-commander", "players", commander),
         createCombatant("combatant-member", "players", member),
         createCombatant("combatant-offside", "monsters", offside)
-    ];
+    ] as Array<ReturnType<typeof createCombatant>> & { get?(id: string): ReturnType<typeof createCombatant> | null };
     for (const extra of extraCombatants) {
         const token = createToken(extra.tokenId, extra.regions);
         combatants.push(createCombatant(extra.id, extra.sideId, token, extra.defeated ?? false));
     }
+    combatants.get = (id: string) => combatants.find((combatant) => combatant.id === id) ?? null;
 
     const templateUtils = options.templateUtils ?? {
         getTemplatesInToken(placeable: { id?: string }) {
@@ -148,8 +157,10 @@ function installGlobals(options: InstallOptions = {}) {
         users: { activeGM: { id: primaryGM, isGM: true, active: true } },
         combat: {
             started: true,
-            current: { tokenId: currentTokenId, turn: 2, round: 1 },
-            previous: previousTokenId === null ? undefined : { tokenId: previousTokenId, turn: 1, round: 1 },
+            current: { tokenId: currentTokenId, combatantId: currentCombatantId, turn: 2, round: 1 },
+            previous: previousCombatantId === null && previousTokenId === null
+                ? undefined
+                : { tokenId: previousTokenId, combatantId: previousCombatantId, turn: 1, round: 1 },
             combatants
         },
         modules: {
@@ -175,6 +186,9 @@ function installGlobals(options: InstallOptions = {}) {
         }
     };
     globalThis.Hooks = createHooks();
+    if (options.cprUpdateCombat) {
+        (globalThis.Hooks as ReturnType<typeof createHooks>).on("updateCombat", options.cprUpdateCombat);
+    }
     (globalThis as { chrisPremades?: unknown }).chrisPremades = {
         macros: defaultMacros,
         utils: { templateUtils }
@@ -195,6 +209,11 @@ function installGlobals(options: InstallOptions = {}) {
         commander,
         member,
         offside,
+        combat: (globalThis.game as { combat: unknown }).combat,
+        getUpdateCombatHandler() {
+            const entries = (globalThis.Hooks as ReturnType<typeof createHooks>).events["updateCombat"] ?? [];
+            return entries[0]?.fn;
+        },
         restore() {
             globalThis.game = original.game;
             globalThis.ui = original.ui;
@@ -455,6 +474,96 @@ test("CPR bridge never fires an everyTurn pass", async () => {
         await env.emitSideTurnStart("players");
 
         assert.equal(env.invocations.some((i) => i.macro === "every-turn"), false);
+    } finally {
+        env.restore();
+    }
+});
+
+// A stand-in for CPR's combatEvents.updateCombat: its source contains the pass
+// markers the wrap looks for, and it records each dispatch so suppression is
+// observable. (Markers as string literals keep them in Function.toString output.)
+function createFakeCprUpdateCombat(sink: unknown[]) {
+    return function fakeCprUpdateCombat(combat: unknown) {
+        sink.push(combat);
+        return ["turnStartSource", "turnEndSource", "turnStartNear", "everyTurn"];
+    };
+}
+
+test("CPR updateCombat wrap suppresses within-side turn changes (commander switch)", async () => {
+    const dispatches: unknown[] = [];
+    const env = installGlobals({
+        currentCombatantId: "combatant-commander",
+        previousCombatantId: "combatant-member",
+        cprUpdateCombat: createFakeCprUpdateCombat(dispatches)
+    });
+    try {
+        registerChrisPremadesIntegration();
+
+        const wrapped = env.getUpdateCombatHandler();
+        assert.ok(typeof wrapped === "function");
+        await wrapped!(env.combat);
+
+        // Previous (member) and current (commander) are both on `players`, so this
+        // is a commander switch and CPR's native dispatch must be suppressed.
+        assert.equal(dispatches.length, 0);
+    } finally {
+        env.restore();
+    }
+});
+
+test("CPR updateCombat wrap lets real cross-side advances dispatch natively", async () => {
+    const dispatches: unknown[] = [];
+    const env = installGlobals({
+        currentCombatantId: "combatant-commander",
+        previousCombatantId: "combatant-offside",
+        cprUpdateCombat: createFakeCprUpdateCombat(dispatches)
+    });
+    try {
+        registerChrisPremadesIntegration();
+
+        const wrapped = env.getUpdateCombatHandler();
+        await wrapped!(env.combat);
+
+        // Previous (monsters) and current (players) differ → real advance → dispatch.
+        assert.equal(dispatches.length, 1);
+    } finally {
+        env.restore();
+    }
+});
+
+test("CPR updateCombat wrap never suppresses non-side-initiative combats", async () => {
+    const dispatches: unknown[] = [];
+    const env = installGlobals({
+        sideCombat: false,
+        currentCombatantId: "combatant-commander",
+        previousCombatantId: "combatant-member",
+        cprUpdateCombat: createFakeCprUpdateCombat(dispatches)
+    });
+    try {
+        registerChrisPremadesIntegration();
+
+        const wrapped = env.getUpdateCombatHandler();
+        await wrapped!(env.combat);
+
+        // Not a side combat → never suppress, even though both combatants would
+        // otherwise resolve to the same disposition-based side.
+        assert.equal(dispatches.length, 1);
+    } finally {
+        env.restore();
+    }
+});
+
+test("CPR updateCombat wrap does not touch handlers that do not match CPR's shape", async () => {
+    const dispatches: unknown[] = [];
+    const notCpr = function someOtherHandler(combat: unknown) {
+        dispatches.push(combat);
+    };
+    const env = installGlobals({ cprUpdateCombat: notCpr });
+    try {
+        registerChrisPremadesIntegration();
+
+        // The non-matching handler is left untouched (still the original reference).
+        assert.equal(env.getUpdateCombatHandler(), notCpr);
     } finally {
         env.restore();
     }
