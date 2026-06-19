@@ -235,18 +235,26 @@ function createPatchedOpportunityAttackScenarios(original: OpportunityAttackFn):
             return original.call(this, payload);
         }
 
-        const originalGet = canvasTokens.get!.bind(canvasTokens);
+        // Gambits' only call to canvas.tokens.get is the "is it the mover's turn"
+        // guard near the top of the OA flow. Serve that single lookup with the
+        // active-side mover so the guard passes, then delegate to the real lookup.
+        // This prevents the override from staying live across Gambits' async OA
+        // dialog (which would resolve the current token — e.g. the commander — to
+        // the mover and mis-target it) and from stacking across overlapping calls.
+        const realGet = canvasTokens.get!.bind(canvasTokens);
+        let guardServed = false;
         canvasTokens.get = function patchedGet(id: string, ...rest: unknown[]): unknown {
-            if (id === currentTokenId) {
+            if (!guardServed && id === currentTokenId) {
+                guardServed = true;
                 return tokenObject ?? token;
             }
-            return originalGet(id, ...rest);
+            return realGet(id, ...rest);
         };
 
         try {
             return await original.call(this, payload);
         } finally {
-            canvasTokens.get = originalGet;
+            canvasTokens.get = realGet;
         }
     };
 }

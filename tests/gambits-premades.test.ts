@@ -43,6 +43,30 @@ function createOriginalOpportunityAttackScenarios() {
     };
 }
 
+// An OA source that looks up the current token twice: once for the turn guard
+// and once "during the OA" afterwards. Used to prove the override only fools the
+// guard and does not leak into later lookups (which would mis-target tokens).
+function createDoubleLookupOriginal() {
+    return async function opportunityAttackScenarios({ tokenUuid, regionUuid, regionScenario }) {
+        const token = await fromUuid(tokenUuid);
+        const region = await fromUuid(regionUuid);
+        if (!token || !region || !regionScenario) return null;
+
+        if (regionScenario === "onTurnStart") {
+            let behaviors = region.behaviors.filter(b => b.name === "onExit" || b.name === "onEnter");
+            return "disabled";
+        }
+
+        let currentCombatant = canvas.tokens.get(game.combat?.current.tokenId);
+        if (currentCombatant?.id !== token.object.id) {
+            return "blocked: not tokens turn in combat";
+        }
+
+        const afterGuard = canvas.tokens.get(game.combat?.current.tokenId);
+        return { guard: currentCombatant.id, after: afterGuard.id };
+    };
+}
+
 function createHooks() {
     const registry = new Map();
     return {
@@ -331,6 +355,29 @@ test("Gambits integration patches the active-side bypass and preserves the origi
         const patched = game.gps.opportunityAttackScenarios;
         registerGambitsPremadesIntegration();
         assert.equal(game.gps.opportunityAttackScenarios, patched);
+    } finally {
+        env.restore();
+    }
+});
+
+test("Gambits OA override only intercepts the turn guard, not later lookups", async () => {
+    const env = installGlobals();
+    try {
+        game.gps.opportunityAttackScenarios = createDoubleLookupOriginal();
+        registerGambitsPremadesIntegration();
+        assert.equal(getGambitsPremadesIntegrationState().status, "patched");
+
+        const result = await game.gps.opportunityAttackScenarios({
+            tokenUuid: "active-commander-uuid",
+            regionUuid: "region-1",
+            regionScenario: "onExit"
+        });
+
+        // The turn-guard lookup resolves to the active-side mover, but the very
+        // next lookup of the same current token must return the real token —
+        // otherwise targeting/AOO detection drifts to the wrong combatant.
+        assert.deepEqual(result, { guard: "active-commander", after: "current-token" });
+        assert.equal(canvas.tokens.get("current-token").id, "current-token");
     } finally {
         env.restore();
     }
