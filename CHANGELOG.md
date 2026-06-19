@@ -2,6 +2,11 @@
 
 ### 🐛 Bug Fixes
 
+- *(gambits)* Scope the OA turn-guard override so it cannot leak
+## [1.1.0] - 2026-06-19
+
+### 🐛 Bug Fixes
+
 - Apply effects that trigger on turn start and end
 - Second pass on fixing start/end of turn effects and reactions
 - Third pass on fixing start/end of turn effects and reactions
@@ -23,6 +28,7 @@
 ### 📚 Documentation
 
 - Document the TypeScript workflow and finalize tooling
+- *(changelog)* Update changelog
 
 ### ⚙️ Miscellaneous Tasks
 
