@@ -1,13 +1,29 @@
 ## [unreleased]
 
-### 🚀 Features
+### 🐛 Bug Fixes
 
-- Bridge side initiative turn events to Gambits Premades region behaviors for every combatant on the active side
-- Support Gambits Premades 2.1.42 and 2.1.43 Opportunity Attack builds
+- Apply effects that trigger on turn start and end
+- Second pass on fixing start/end of turn effects and reactions
+- Third pass on fixing start/end of turn effects and reactions
+- Removed old MidiQOL hooks for reactions
+- Finalized reaction used removal logic
+- Don't stop removing reactions if one errors
+- Skip commander when removing reactions
 
-### ♻️ Refactor
+### 💼 Other
 
-- Rewrite the module in TypeScript with full Foundry V13 type definitions (src/ → scripts/ build)
+- Add TypeScript toolchain (tsc, tsx, fvtt-types)
+
+### 🚜 Refactor
+
+- *(ts)* Port core types, constants and logic to TypeScript
+- *(ts)* Port API, controller, integrations and UI to TypeScript
+- *(ts)* Make src the runtime entry; convert tests and tools
+
+### 📚 Documentation
+
+- Document the TypeScript workflow and finalize tooling
+## [1.0.7] - 2026-06-14
 
 ### 🐛 Bug Fixes
 
@@ -15,6 +31,7 @@
 
 ### 📚 Documentation
 
+- *(changelog)* Update changelog
 - *(changelog)* Update changelog
 - *(changelog)* Update changelog
 ## [1.0.6] - 2026-06-14
