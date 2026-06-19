@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { handleCommanderSocketRequest, SideInitiativeAPI } from "../scripts/api.mjs";
+import { handleCommanderSocketRequest, SideInitiativeAPI } from "../src/api.js";
 
 function createCombatant({ id, sideId, hasPlayerOwner = true, ownerIds = ["user-1"] }) {
     const flags = new Map();

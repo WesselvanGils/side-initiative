@@ -13,7 +13,7 @@
         "verified": "13"
     },
     "esmodules": [
-        "scripts/module.mjs"
+        "scripts/module.js"
     ],
     "styles": [
         "styles/module.css"

@@ -5,7 +5,7 @@ import {
     extractChangelogReleaseNotes,
     getRepositoryBaseUrl,
     normalizeReleaseTag
-} from "../tools/build-release.mjs";
+} from "../tools/build-release.js";
 
 test("normalizeReleaseTag strips a leading v from the tag", () => {
     assert.deepEqual(normalizeReleaseTag("v1.2.3"), {

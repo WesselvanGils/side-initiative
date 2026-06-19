@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { SideInitiativeAPI } from "../scripts/api.mjs";
+import { SideInitiativeAPI } from "../src/api.js";
 import {
     defaultSideIdForCombatant,
     ensureCombatantSideAssignments,
@@ -20,7 +20,7 @@ import {
     normalizeCombatState,
     rollSideInitiativeData,
     rollWeightedSideInitiativeData
-} from "../scripts/logic.mjs";
+} from "../src/logic.js";
 
 function createCombatant({
     id,

@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { registerMidiQolIntegration } from "../scripts/integration/midi-qol.mjs";
+import { registerMidiQolIntegration } from "../src/integration/midi-qol.js";
 
 function createCombatant({ id, sideId, actor, defeated = false }) {
     return {

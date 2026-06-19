@@ -54,11 +54,18 @@ export function isSupportedGambitsPremadesVersion(version: string | null | undef
 /**
  * Validate that the installed Gambits AOO function still matches the expected source shape.
  * Acts as a type guard so callers can narrow to {@link OpportunityAttackFn}.
+ *
+ * Comparison is whitespace-insensitive so it holds against both the authored
+ * Gambits source and minified/bundled builds (and the transpiled test fixtures).
  */
+function squashWhitespace(value: string): string {
+    return value.replace(/\s+/g, "");
+}
+
 export function validateGambitsOpportunityAttackSource(fn: unknown): fn is OpportunityAttackFn {
     if (typeof fn !== "function") return false;
-    const source = Function.prototype.toString.call(fn);
-    return SUPPORTED_OPPORTUNITY_ATTACK_SOURCE_MARKERS.every((marker) => source.includes(marker));
+    const source = squashWhitespace(Function.prototype.toString.call(fn));
+    return SUPPORTED_OPPORTUNITY_ATTACK_SOURCE_MARKERS.every((marker) => source.includes(squashWhitespace(marker)));
 }
 
 /**
@@ -194,12 +201,8 @@ async function bridgeSideTurn(payload: SideTurnPayload, behaviorName: string): P
 function registerSideTurnBridge(): void {
     if (integrationState.bridgeRegistered) return;
     integrationState.bridgeRegistered = true;
-    hooks().on("side-initiative.sideTurnStart", (payload: SideTurnPayload): void => {
-        void bridgeSideTurn(payload ?? {}, "onTurnStart");
-    });
-    hooks().on("side-initiative.sideTurnEnd", (payload: SideTurnPayload): void => {
-        void bridgeSideTurn(payload ?? {}, "onTurnEnd");
-    });
+    hooks()?.on("side-initiative.sideTurnStart", (payload: SideTurnPayload) => bridgeSideTurn(payload ?? {}, "onTurnStart"));
+    hooks()?.on("side-initiative.sideTurnEnd", (payload: SideTurnPayload) => bridgeSideTurn(payload ?? {}, "onTurnEnd"));
 }
 
 function createPatchedOpportunityAttackScenarios(original: OpportunityAttackFn): OpportunityAttackFn {
@@ -308,6 +311,6 @@ export function registerGambitsPremadesIntegration(): void {
     if (tryPatchGambitsOpportunityAttack()) return;
 
     if (integrationState.status !== "patched") {
-        hooks().once("socketlib.ready", tryPatchGambitsOpportunityAttack);
+        hooks()?.once("socketlib.ready", tryPatchGambitsOpportunityAttack);
     }
 }

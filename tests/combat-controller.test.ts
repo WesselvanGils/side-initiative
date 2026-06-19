@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { SideInitiativeAPI } from "../scripts/api.mjs";
-import { installCombatPatches } from "../scripts/combat-controller.mjs";
+import { SideInitiativeAPI } from "../src/api.js";
+import { installCombatPatches } from "../src/controller/combat-controller.js";
 
 test("side combat turn controls are gated by commander permissions", async () => {
     const original = {

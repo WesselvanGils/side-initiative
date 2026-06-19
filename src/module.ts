@@ -109,13 +109,13 @@ function registerKeybindings(): void {
  * Register Foundry hooks used by the module.
  */
 function registerHooks(): void {
-    hooks().on("renderCombatTracker", renderCombatTracker);
-    hooks().on("getCombatantContextOptions", addCombatantContextOptions);
-    hooks().on("createCombat", async (combat: CombatLike) => {
+    hooks()?.on("renderCombatTracker", renderCombatTracker);
+    hooks()?.on("getCombatantContextOptions", addCombatantContextOptions);
+    hooks()?.on("createCombat", async (combat: CombatLike) => {
         if (!isActiveGMClient()) return;
         await getSideInitiative()?.refreshCombatantSides?.(combat);
     });
-    hooks().on("updateCombat", handleCombatStartedUpdate);
+    hooks()?.on("updateCombat", handleCombatStartedUpdate);
 }
 
 Hooks.once("init", () => {

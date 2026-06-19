@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { renderCombatTracker } from "../scripts/ui/tracker.mjs";
-import { SOCKET_EVENT } from "../scripts/constants.mjs";
+import { renderCombatTracker } from "../src/ui/tracker.js";
+import { SOCKET_EVENT } from "../src/constants.js";
 
 function createClassList(owner) {
     const values = new Set();

@@ -21,7 +21,7 @@ import {
     setCombatantSideSource,
     getCombatantInitiativeWeight
 } from "./logic.js";
-import { getActiveGMUser, getSideInitiative, getSetting, hooks, isActiveGMClient } from "./runtime.js";
+import { getActiveGMUser, getConst, getFoundry, getSideInitiative, getSetting, hooks, isActiveGMClient } from "./runtime.js";
 import type {
     CombatLike,
     CombatState,
@@ -130,7 +130,7 @@ function emitSideTurnEndHook(combat: CombatLike | null | undefined, sideId: stri
         sideId: normalizeSideId(sideId),
         nextSideId: nextSideId ? normalizeSideId(nextSideId) : null
     };
-    hooks().callAll("side-initiative.sideTurnEnd", payload);
+    hooks()?.callAll("side-initiative.sideTurnEnd", payload);
 }
 
 function emitSideTurnStartHook(combat: CombatLike | null | undefined, sideId: string | null | undefined, previousSideId: string | null | undefined): void {
@@ -140,7 +140,7 @@ function emitSideTurnStartHook(combat: CombatLike | null | undefined, sideId: st
         sideId: normalizeSideId(sideId),
         previousSideId: previousSideId ? normalizeSideId(previousSideId) : null
     };
-    hooks().callAll("side-initiative.sideTurnStart", payload);
+    hooks()?.callAll("side-initiative.sideTurnStart", payload);
 }
 
 function getCombatantEntries(combat: CombatLike | null | undefined): CombatantLike[] {
@@ -156,7 +156,7 @@ function getCombatantEntries(combat: CombatLike | null | undefined): CombatantLi
 }
 
 function getRollClass(): (typeof Roll) | null {
-    return foundry?.dice?.Roll ?? null;
+    return getFoundry()?.dice?.Roll ?? null;
 }
 
 interface VisibleSideDieOptions {
@@ -177,8 +177,8 @@ async function rollVisibleSideDie(side: { id: string; name: string }, options: V
     }
 
     const roll = Roll.create("1d20") as Roll & { total: number | null };
-    await roll.evaluate({ allowInteractive: rollMode !== CONST?.DICE_ROLL_MODES?.BLIND });
-    const speaker = foundry?.documents?.ChatMessage?.implementation?.getSpeaker?.({ alias: side.name })
+    await roll.evaluate({ allowInteractive: rollMode !== getConst()?.DICE_ROLL_MODES?.BLIND });
+    const speaker = getFoundry()?.documents?.ChatMessage?.implementation?.getSpeaker?.({ alias: side.name })
         ?? { alias: side.name };
     const flavor = game?.i18n?.format?.("COMBAT.RollsInitiative", { name: side.name })
         ?? `${side.name} initiative`;

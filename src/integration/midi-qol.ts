@@ -113,12 +113,12 @@ async function resetReactionsForSide(combat: CombatLike | null | undefined, side
  * Register MidiQOL integration hooks.
  */
 export function registerMidiQolIntegration(): void {
-    hooks().on("midi-qol.preSetReactionUsed", (actor: ActorLike | null | undefined): boolean => {
+    hooks()?.on("midi-qol.preSetReactionUsed", (actor: ActorLike | null | undefined): boolean => {
         if (!actor) return true;
         return !isActorOnActiveSide(actor, game?.combat as CombatLike | null);
     });
 
-    hooks().on("side-initiative.sideTurnStart", async ({ combat, sideId }: SideTurnPayload = {}): Promise<void> => {
+    hooks()?.on("side-initiative.sideTurnStart", async ({ combat, sideId }: SideTurnPayload = {}): Promise<void> => {
         if (!game?.user?.isGM || !isPrimaryGMClient()) return;
         await resetReactionsForSide(combat ?? null, sideId ?? null);
     });

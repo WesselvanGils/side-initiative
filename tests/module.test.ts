@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { INITIATIVE_METHOD_OPTIONS } from "../scripts/constants.mjs";
+import { INITIATIVE_METHOD_OPTIONS } from "../src/constants.js";
 
 async function loadModuleUnderTest(game) {
     const original = {
@@ -14,7 +14,7 @@ async function loadModuleUnderTest(game) {
     };
     globalThis.game = game;
 
-    const module = await import("../scripts/module.mjs");
+    const module = await import("../src/module.js");
     return {
         module,
         restore() {

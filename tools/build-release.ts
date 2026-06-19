@@ -17,7 +17,18 @@ const RELEASE_ENTRIES = [
     "lang"
 ];
 
-function normalizeReleaseTag(tag) {
+interface NormalizedTag {
+    tagName: string;
+    version: string;
+}
+
+interface ReleaseManifestOptions {
+    tagName: string;
+    version: string;
+    repositoryBaseUrl: string;
+}
+
+function normalizeReleaseTag(tag: string): NormalizedTag {
     const rawTag = String(tag ?? "").trim();
     if (!rawTag) {
         throw new Error("A release tag is required.");
@@ -32,7 +43,7 @@ function normalizeReleaseTag(tag) {
     return { tagName, version };
 }
 
-function getRepositoryBaseUrl(manifestUrl) {
+function getRepositoryBaseUrl(manifestUrl: string): string {
     const match = /^https:\/\/github\.com\/([^/]+\/[^/]+)\/releases\/latest\/download\/module\.json$/.exec(String(manifestUrl ?? ""));
     if (!match) {
         throw new Error("module.json manifest must point to the GitHub latest download URL.");
@@ -41,7 +52,7 @@ function getRepositoryBaseUrl(manifestUrl) {
     return `https://github.com/${match[1]}`;
 }
 
-function buildReleaseManifest(sourceManifest, { tagName, version, repositoryBaseUrl }) {
+function buildReleaseManifest(sourceManifest: Record<string, unknown>, { tagName, version, repositoryBaseUrl }: ReleaseManifestOptions): Record<string, unknown> {
     return {
         ...sourceManifest,
         version,
@@ -49,7 +60,7 @@ function buildReleaseManifest(sourceManifest, { tagName, version, repositoryBase
     };
 }
 
-function extractChangelogSection(lines, headingPrefix) {
+function extractChangelogSection(lines: string[], headingPrefix: string): string | null {
     const startIndex = lines.findIndex((line) => line.startsWith(headingPrefix));
     if (startIndex === -1) return null;
 
@@ -64,7 +75,7 @@ function extractChangelogSection(lines, headingPrefix) {
     return lines.slice(startIndex, endIndex).join("\n").trim();
 }
 
-function extractChangelogReleaseNotes(changelogText, version) {
+function extractChangelogReleaseNotes(changelogText: string, version: string): string {
     const lines = String(changelogText ?? "").split(/\r?\n/);
     const releaseSection = extractChangelogSection(lines, `## [${version}]`);
 
@@ -81,18 +92,28 @@ function extractChangelogReleaseNotes(changelogText, version) {
     return `## [${version}]\n\nNo changelog entry was found for this release.\n`;
 }
 
-async function stageReleaseBundle({ rootDir, outDir, tag }) {
+interface StageResult {
+    releaseRoot: string;
+    zipPath: string;
+    manifestPath: string;
+    releaseNotesPath: string;
+    tagName: string;
+    version: string;
+    repositoryBaseUrl: string;
+}
+
+async function stageReleaseBundle({ rootDir, outDir, tag }: { rootDir: string; outDir: string; tag: string }): Promise<StageResult> {
     const { tagName, version } = normalizeReleaseTag(tag);
     const sourceManifestPath = join(rootDir, "module.json");
     const changelogPath = join(rootDir, "CHANGELOG.md");
-    const sourceManifest = JSON.parse(await readFile(sourceManifestPath, "utf-8"));
+    const sourceManifest = JSON.parse(await readFile(sourceManifestPath, "utf-8")) as Record<string, unknown> & { id?: string; manifest?: string };
     const changelog = await readFile(changelogPath, "utf-8");
 
     if (sourceManifest.id !== MODULE_ID) {
         throw new Error(`Expected module.json id to be "${MODULE_ID}".`);
     }
 
-    const repositoryBaseUrl = getRepositoryBaseUrl(sourceManifest.manifest);
+    const repositoryBaseUrl = getRepositoryBaseUrl(String(sourceManifest.manifest ?? ""));
     const releaseManifest = buildReleaseManifest(sourceManifest, { tagName, version, repositoryBaseUrl });
     const releaseRoot = join(outDir, MODULE_ID);
     const zipPath = join(outDir, `${MODULE_ID}-${tagName}.zip`);
@@ -100,7 +121,7 @@ async function stageReleaseBundle({ rootDir, outDir, tag }) {
     await rm(outDir, { recursive: true, force: true });
     await mkdir(releaseRoot, { recursive: true });
 
-    const entries = [];
+    const entries: string[] = [];
     for (const entry of RELEASE_ENTRIES) {
         try {
             await access(join(rootDir, entry), fsConstants.F_OK);
@@ -137,10 +158,13 @@ async function stageReleaseBundle({ rootDir, outDir, tag }) {
     };
 }
 
-async function main() {
+async function main(): Promise<void> {
     const rootDir = resolve(process.cwd());
     const outDir = join(rootDir, RELEASE_ROOT);
     const tag = process.argv[2] ?? process.env.GITHUB_REF_NAME;
+    if (!tag) {
+        throw new Error("A release tag is required (pass it as the first argument or via GITHUB_REF_NAME).");
+    }
     const result = await stageReleaseBundle({ rootDir, outDir, tag });
 
     console.log(`Release manifest: ${result.manifestPath}`);

@@ -75,6 +75,24 @@ interface LooseHooks {
     callAll(name: string, ...args: unknown[]): void;
 }
 
-export function hooks(): LooseHooks {
-    return Hooks as unknown as LooseHooks;
+/**
+ * Defensive view of the global `Hooks`. Read via `globalThis` so it is
+ * `undefined` (rather than throwing) when the hook bus is not present — the
+ * module's emit paths no-op in that case, matching the original behavior.
+ */
+export function hooks(): LooseHooks | undefined {
+    return (globalThis as unknown as { Hooks?: LooseHooks }).Hooks;
+}
+
+/**
+ * Defensive accessors for other Foundry globals that the original code read via
+ * `globalThis.X?.` so they degrade gracefully in environments (and tests) where
+ * they are not present.
+ */
+export function getFoundry(): typeof foundry | undefined {
+    return (globalThis as unknown as { foundry?: typeof foundry }).foundry;
+}
+
+export function getConst(): typeof CONST | undefined {
+    return (globalThis as unknown as { CONST?: typeof CONST }).CONST;
 }

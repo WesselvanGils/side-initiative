@@ -151,3 +151,6 @@ foundry
 
 # Foundry modules
 libs
+
+# TypeScript build output
+scripts

@@ -7,7 +7,7 @@ import {
     registerGambitsPremadesIntegration,
     resetGambitsPremadesIntegrationState,
     validateGambitsOpportunityAttackSource
-} from "../scripts/integration/gambits-premades.mjs";
+} from "../src/integration/gambits-premades.js";
 
 function createOriginalOpportunityAttackScenarios() {
     return async function opportunityAttackScenarios({ tokenUuid, regionUuid, regionScenario }) {
