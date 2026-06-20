@@ -2,6 +2,7 @@ import { COMMANDER_CONTROL_OPTIONS, INITIATIVE_METHOD_OPTIONS, MODULE_ID, SETTIN
 import { SideInitiativeAPI, handleCommanderSocketRequest } from "./api.js";
 import { installCombatPatches } from "./controller/combat-controller.js";
 import { registerChrisPremadesIntegration } from "./integration/chris-premades.js";
+import { registerDnd5eIntegration } from "./integration/dnd5e.js";
 import { registerGambitsPremadesIntegration } from "./integration/gambits-premades.js";
 import { registerLegendaryActionsIntegration } from "./integration/legendary-actions.js";
 import { registerMidiQolIntegration } from "./integration/midi-qol.js";
@@ -142,6 +143,7 @@ Hooks.once("ready", () => {
     if (game?.combat) {
         getSideInitiative()?.refreshCombatantSides?.(game.combat as CombatLike);
     }
+    registerDnd5eIntegration();
     registerGambitsPremadesIntegration();
     if (game?.modules?.get?.("chris-premades")?.active) {
         registerChrisPremadesIntegration();

@@ -7,6 +7,10 @@
 
 ### 🐛 Bug Fixes
 
+- Recover legendary actions at the start of a side's turn (for every creature on the side) instead of at the end of the representative's turn
+
+### 🐛 Bug Fixes
+
 - Resolved serveral issues related to CPR
 - Template behavior for cauldron of plentiful resources integration
 - Midi-qol auto-untarget at end of turn being incompatible

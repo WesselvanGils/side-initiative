@@ -1,3 +1,12 @@
+update:
+    git pull
+    npm run build
+
+commit message:
+    git add .
+    git commit -m "{{message}}"
+    git push 
+
 release version:
     #!/usr/bin/env bash
     set -euo pipefail
@@ -17,7 +26,3 @@ release version:
     git tag "{{version}}"
 
     git push origin main "{{version}}"
-
-update:
-    git pull
-    npm run build
