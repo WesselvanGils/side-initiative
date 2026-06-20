@@ -46,7 +46,7 @@ Because every creature on a side acts at once, Chris' Premades' usual end-of-tur
 - **Extra Attack** is honoured: a weapon Attack action only opens a window once the actor has made all of its attacks for that action. The expected count is read from the actor's features (`Extra Attack` = 2, `Two Extra Attacks` = 3, `Three Extra Attacks` = 4).
 - Requires both Chris' Premades and MidiQOL. Detection runs on MidiQOL's activity workflows; a few utility actions MidiQOL does not workflow may not open a window.
 
-Legendary actions are also recovered at the **start** of a side's turn for every creature on that side. (dnd5e normally recovers them at the end of a single creature's turn, which in side initiative only ever reaches the side's representative — so they recovered at the wrong time and other legendary creatures never recovered at all. This is always on for side combats; it is not tied to the Legendary Action Windows setting.)
+Legendary actions are also recovered at the **start** of a side's turn for every creature on that side, and dnd5e's native end-of-turn recovery is suppressed for side combats so it only happens once. (dnd5e normally recovers them at the end of a single creature's turn, which in side initiative only ever reaches the side's representative — so they recovered at the wrong time and other legendary creatures never recovered at all. This is always on for side combats; it is not tied to the Legendary Action Windows setting.)
 
 ## Development
 

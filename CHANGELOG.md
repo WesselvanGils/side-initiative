@@ -7,7 +7,7 @@
 
 ### 🐛 Bug Fixes
 
-- Recover legendary actions at the start of a side's turn (for every creature on the side) instead of at the end of the representative's turn
+- Recover legendary actions at the start of a side's turn (for every creature on the side) instead of at the end of the representative's turn, and suppress dnd5e's native end-of-turn recovery for side combats so it happens once
 
 ### 🐛 Bug Fixes
 

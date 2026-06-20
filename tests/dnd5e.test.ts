@@ -223,3 +223,77 @@ test("nothing happens before combat has started", async () => {
         env.restore();
     }
 });
+
+test("dnd5e's end-of-turn legendary recovery is suppressed for side combats", () => {
+    const combat = createCombat([], "monsters");
+    const combatant = { id: "npc-1", parent: combat };
+    const results = {
+        actor: { "system.resources.legact.value": 3, "system.attributes.hp.value": 10 },
+        item: [],
+        rolls: []
+    };
+
+    const env = installGlobals({ combat });
+    try {
+        registerDnd5eIntegration();
+        const [combatRecovery] = env.hooks.get("dnd5e.combatRecovery");
+        combatRecovery(combatant, ["turnEnd"], results);
+
+        assert.equal("system.resources.legact.value" in results.actor, false);
+        // Other recovery (item uses, unrelated actor fields) is left intact.
+        assert.equal(results.actor["system.attributes.hp.value"], 10);
+    } finally {
+        env.restore();
+    }
+});
+
+test("dnd5e's end-of-turn legendary recovery is left intact for non-side combats", () => {
+    const combat: any = { id: "combat-1", round: 1, started: true, combatants: [], getFlag: () => null };
+    const combatant = { id: "npc-1", parent: combat };
+    const results = { actor: { "system.resources.legact.value": 3 }, item: [], rolls: [] };
+
+    const env = installGlobals({ combat });
+    try {
+        registerDnd5eIntegration();
+        const [combatRecovery] = env.hooks.get("dnd5e.combatRecovery");
+        combatRecovery(combatant, ["turnEnd"], results);
+
+        assert.equal(results.actor["system.resources.legact.value"], 3);
+    } finally {
+        env.restore();
+    }
+});
+
+test("encounter-start legendary recovery is not suppressed", () => {
+    const combat = createCombat([], "monsters");
+    const combatant = { id: "npc-1", parent: combat };
+    const results = { actor: { "system.resources.legact.value": 3 }, item: [], rolls: [] };
+
+    const env = installGlobals({ combat });
+    try {
+        registerDnd5eIntegration();
+        const [combatRecovery] = env.hooks.get("dnd5e.combatRecovery");
+        combatRecovery(combatant, ["encounter"], results);
+
+        assert.equal(results.actor["system.resources.legact.value"], 3);
+    } finally {
+        env.restore();
+    }
+});
+
+test("the combatRecovery hook is harmless when there is no legact key to remove", () => {
+    const combat = createCombat([], "monsters");
+    const combatant = { id: "npc-1", parent: combat };
+    const results = { actor: { "system.attributes.hp.value": 10 }, item: [], rolls: [] };
+
+    const env = installGlobals({ combat });
+    try {
+        registerDnd5eIntegration();
+        const [combatRecovery] = env.hooks.get("dnd5e.combatRecovery");
+        combatRecovery(combatant, ["turnEnd"], results);
+
+        assert.deepEqual(results.actor, { "system.attributes.hp.value": 10 });
+    } finally {
+        env.restore();
+    }
+});
