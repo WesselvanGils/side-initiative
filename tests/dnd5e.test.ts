@@ -1,37 +1,44 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { registerDnd5eIntegration } from "../src/integration/dnd5e.js";
+import {
+    getLegendaryCombatantsToRecover,
+    registerDnd5eIntegration,
+    shouldSuppressNativeRecovery
+} from "../src/integration/dnd5e.js";
 
-interface ActorState {
+interface ActorOptions {
     id: string;
-    uuid: string;
     legactValue?: number;
     legactMax?: number;
 }
 
-function createLegendaryActor({ id, legactValue, legactMax }: ActorState) {
-    const updates: Array<{ actorUuid: string; data: Record<string, unknown> }> = [];
-    const actor: any = {
+function createActor({ id, legactValue, legactMax }: ActorOptions): any {
+    return {
         id,
         uuid: `${id}-uuid`,
         name: id,
-        get updates() {
-            return updates;
-        },
         system: {
             resources:
                 legactMax == null
                     ? {}
                     : { legact: { value: legactValue ?? legactMax, max: legactMax } }
-        },
-        async update(data: Record<string, unknown>) {
-            updates.push({ actorUuid: this.uuid, data });
         }
     };
-    return { actor, updates };
 }
 
-function createCombatant({ id, sideId, actor, defeated = false }: { id: string; sideId: string; actor: any; defeated?: boolean }) {
+function createCombatant({
+    id,
+    sideId,
+    actor,
+    defeated = false,
+    recoverCombatUses
+}: {
+    id: string;
+    sideId: string;
+    actor: any;
+    defeated?: boolean;
+    recoverCombatUses?: (periods: string[]) => Promise<void>;
+}): any {
     return {
         id,
         defeated,
@@ -39,24 +46,20 @@ function createCombatant({ id, sideId, actor, defeated = false }: { id: string; 
         getFlag(scope: string, key: string) {
             if (scope === "side-initiative" && key === "sideId") return sideId;
             return null;
-        }
+        },
+        recoverCombatUses
     };
 }
 
-function createCombat(combatants: any[], activeSideId: string) {
+function createCombat(combatants: any[], activeSideId: string, started = true): any {
     return {
         id: "combat-1",
         round: 1,
-        started: true,
+        started,
         combatants,
         getFlag(scope: string, key: string) {
             if (scope === "side-initiative" && key === "state") {
-                return {
-                    activeSideId,
-                    order: ["players", "monsters"],
-                    sides: {},
-                    commanderIds: {}
-                };
+                return { activeSideId, order: [activeSideId], sides: {}, commanderIds: {} };
             }
             return null;
         }
@@ -76,12 +79,8 @@ function createHooks() {
     };
 }
 
-function installGlobals({ combat, primaryGM = true }: { combat: any; primaryGM?: boolean }) {
-    const original = {
-        game: globalThis.game,
-        Hooks: globalThis.Hooks
-    };
-
+function installGlobals({ combat, primaryGM = true }: { combat?: any; primaryGM?: boolean } = {}) {
+    const original = { game: globalThis.game, Hooks: globalThis.Hooks };
     const hooks = createHooks();
     globalThis.Hooks = hooks as unknown as typeof Hooks;
     globalThis.game = {
@@ -89,7 +88,6 @@ function installGlobals({ combat, primaryGM = true }: { combat: any; primaryGM?:
         user: { id: primaryGM ? "gm-1" : "other", isGM: true },
         users: { activeGM: { id: "gm-1", isGM: true, active: true }, contents: [{ id: "gm-1", isGM: true, active: true }] }
     } as never;
-
     return {
         hooks,
         restore() {
@@ -99,13 +97,79 @@ function installGlobals({ combat, primaryGM = true }: { combat: any; primaryGM?:
     };
 }
 
-test("legendary actions are recovered for every combatant on the active side at sideTurnStart", async () => {
-    const depleted = createLegendaryActor({ id: "aboleth", legactValue: 0, legactMax: 3 });
-    const alsoDepleted = createLegendaryActor({ id: "dragon", legactValue: 1, legactMax: 3 });
+/* ------------------------------------------------------------------ */
+/* getLegendaryCombatantsToRecover                                     */
+/* ------------------------------------------------------------------ */
+
+test("getLegendaryCombatantsToRecover returns only depleted legendary creatures on the side", () => {
     const combat = createCombat(
         [
-            createCombatant({ id: "npc-1", sideId: "monsters", actor: depleted.actor }),
-            createCombatant({ id: "npc-2", sideId: "monsters", actor: alsoDepleted.actor })
+            createCombatant({ id: "npc-depleted", sideId: "monsters", actor: createActor({ id: "a", legactValue: 0, legactMax: 3 }) }),
+            createCombatant({ id: "npc-full", sideId: "monsters", actor: createActor({ id: "b", legactValue: 3, legactMax: 3 }) }),
+            createCombatant({ id: "npc-none", sideId: "monsters", actor: createActor({ id: "c" }) }),
+            createCombatant({ id: "npc-defeated", sideId: "monsters", actor: createActor({ id: "d", legactValue: 0, legactMax: 3 }), defeated: true }),
+            createCombatant({ id: "npc-otherside", sideId: "players", actor: createActor({ id: "e", legactValue: 0, legactMax: 3 }) })
+        ],
+        "monsters"
+    );
+
+    const result = getLegendaryCombatantsToRecover(combat, "monsters").map((c) => c.id);
+    assert.deepEqual(result, ["npc-depleted"]);
+});
+
+test("getLegendaryCombatantsToRecover is empty before combat starts", () => {
+    const combat = createCombat(
+        [createCombatant({ id: "npc-1", sideId: "monsters", actor: createActor({ id: "a", legactValue: 0, legactMax: 3 }) })],
+        "monsters",
+        false
+    );
+    assert.equal(getLegendaryCombatantsToRecover(combat, "monsters").length, 0);
+});
+
+/* ------------------------------------------------------------------ */
+/* shouldSuppressNativeRecovery                                        */
+/* ------------------------------------------------------------------ */
+
+test("shouldSuppressNativeRecovery suppresses end-of-turn recovery for side combats", () => {
+    const sideCombat = createCombat([], "monsters");
+    const combatant = { combat: sideCombat };
+    assert.equal(shouldSuppressNativeRecovery(combatant as never, ["turnEnd"], false), true);
+});
+
+test("shouldSuppressNativeRecovery does not suppress our own guarded recovery", () => {
+    const sideCombat = createCombat([], "monsters");
+    const combatant = { combat: sideCombat };
+    assert.equal(shouldSuppressNativeRecovery(combatant as never, ["turnEnd"], true), false);
+});
+
+test("shouldSuppressNativeRecovery leaves non-side combats and non-turnEnd periods alone", () => {
+    const sideCombat = createCombat([], "monsters");
+    const nonSideCombat: any = { getFlag: () => null };
+    assert.equal(shouldSuppressNativeRecovery({ combat: nonSideCombat } as never, ["turnEnd"], false), false);
+    assert.equal(shouldSuppressNativeRecovery({ combat: sideCombat } as never, ["encounter"], false), false);
+    assert.equal(shouldSuppressNativeRecovery({ combat: sideCombat } as never, ["turnStart"], false), false);
+});
+
+/* ------------------------------------------------------------------ */
+/* Integration: sideTurnStart drives recovery, preCombatRecovery gates  */
+/* ------------------------------------------------------------------ */
+
+test("sideTurnStart calls dnd5e's recoverCombatUses for depleted legendary creatures", async () => {
+    const recoverCalls: Array<{ id: string; periods: string[] }> = [];
+    const combat = createCombat(
+        [
+            createCombatant({
+                id: "npc-1",
+                sideId: "monsters",
+                actor: createActor({ id: "aboleth", legactValue: 0, legactMax: 3 }),
+                recoverCombatUses: async (periods) => { recoverCalls.push({ id: "npc-1", periods }); }
+            }),
+            createCombatant({
+                id: "npc-2",
+                sideId: "monsters",
+                actor: createActor({ id: "dragon", legactValue: 3, legactMax: 3 }),
+                recoverCombatUses: async (periods) => { recoverCalls.push({ id: "npc-2", periods }); }
+            })
         ],
         "monsters"
     );
@@ -116,79 +180,24 @@ test("legendary actions are recovered for every combatant on the active side at 
         const [sideTurnStart] = env.hooks.get("side-initiative.sideTurnStart");
         await sideTurnStart({ combat, sideId: "monsters" });
 
-        assert.deepEqual(depleted.updates, [{ actorUuid: "aboleth-uuid", data: { "system.resources.legact.value": 3 } }]);
-        assert.deepEqual(alsoDepleted.updates, [{ actorUuid: "dragon-uuid", data: { "system.resources.legact.value": 3 } }]);
+        // Only the depleted legendary creature is recovered; full creature is skipped.
+        assert.deepEqual(recoverCalls, [{ id: "npc-1", periods: ["turnEnd"] }]);
     } finally {
         env.restore();
     }
 });
 
-test("combatants on other sides are not recovered", async () => {
-    const monster = createLegendaryActor({ id: "aboleth", legactValue: 0, legactMax: 3 });
-    const combat = createCombat(
-        [createCombatant({ id: "npc-1", sideId: "monsters", actor: monster.actor })],
-        "players"
-    );
-
-    const env = installGlobals({ combat });
-    try {
-        registerDnd5eIntegration();
-        const [sideTurnStart] = env.hooks.get("side-initiative.sideTurnStart");
-        await sideTurnStart({ combat, sideId: "players" });
-
-        assert.deepEqual(monster.updates, []);
-    } finally {
-        env.restore();
-    }
-});
-
-test("defeated combatants are skipped", async () => {
-    const defeated = createLegendaryActor({ id: "aboleth", legactValue: 0, legactMax: 3 });
-    const combat = createCombat(
-        [createCombatant({ id: "npc-1", sideId: "monsters", actor: defeated.actor, defeated: true })],
-        "monsters"
-    );
-
-    const env = installGlobals({ combat });
-    try {
-        registerDnd5eIntegration();
-        const [sideTurnStart] = env.hooks.get("side-initiative.sideTurnStart");
-        await sideTurnStart({ combat, sideId: "monsters" });
-
-        assert.deepEqual(defeated.updates, []);
-    } finally {
-        env.restore();
-    }
-});
-
-test("combatants already at max and combatants without legendary actions are left alone", async () => {
-    const full = createLegendaryActor({ id: "aboleth", legactValue: 3, legactMax: 3 });
-    const player = createLegendaryActor({ id: "fighter" }); // no legact
+test("sideTurnStart does nothing on a non-primary-GM client", async () => {
+    const recoverCalls: string[] = [];
     const combat = createCombat(
         [
-            createCombatant({ id: "npc-1", sideId: "monsters", actor: full.actor }),
-            createCombatant({ id: "pc-1", sideId: "monsters", actor: player.actor })
+            createCombatant({
+                id: "npc-1",
+                sideId: "monsters",
+                actor: createActor({ id: "aboleth", legactValue: 0, legactMax: 3 }),
+                recoverCombatUses: async () => { recoverCalls.push("npc-1"); }
+            })
         ],
-        "monsters"
-    );
-
-    const env = installGlobals({ combat });
-    try {
-        registerDnd5eIntegration();
-        const [sideTurnStart] = env.hooks.get("side-initiative.sideTurnStart");
-        await sideTurnStart({ combat, sideId: "monsters" });
-
-        assert.deepEqual(full.updates, []);
-        assert.deepEqual(player.updates, []);
-    } finally {
-        env.restore();
-    }
-});
-
-test("recovery only runs on the primary GM client", async () => {
-    const depleted = createLegendaryActor({ id: "aboleth", legactValue: 0, legactMax: 3 });
-    const combat = createCombat(
-        [createCombatant({ id: "npc-1", sideId: "monsters", actor: depleted.actor })],
         "monsters"
     );
 
@@ -197,102 +206,35 @@ test("recovery only runs on the primary GM client", async () => {
         registerDnd5eIntegration();
         const [sideTurnStart] = env.hooks.get("side-initiative.sideTurnStart");
         await sideTurnStart({ combat, sideId: "monsters" });
-
-        assert.deepEqual(depleted.updates, []);
+        assert.deepEqual(recoverCalls, []);
     } finally {
         env.restore();
     }
 });
 
-test("nothing happens before combat has started", async () => {
-    const depleted = createLegendaryActor({ id: "aboleth", legactValue: 0, legactMax: 3 });
-    const combat = createCombat(
-        [createCombatant({ id: "npc-1", sideId: "monsters", actor: depleted.actor })],
-        "monsters"
-    );
-    combat.started = false;
-
-    const env = installGlobals({ combat });
+test("preCombatRecovery handler blocks native end-of-turn recovery for side combats", () => {
+    const sideCombat = createCombat([], "monsters");
+    const env = installGlobals({ combat: sideCombat });
     try {
         registerDnd5eIntegration();
-        const [sideTurnStart] = env.hooks.get("side-initiative.sideTurnStart");
-        await sideTurnStart({ combat, sideId: "monsters" });
+        const [preCombatRecovery] = env.hooks.get("dnd5e.preCombatRecovery");
 
-        assert.deepEqual(depleted.updates, []);
+        assert.equal(preCombatRecovery({ combat: sideCombat }, ["turnEnd"]), false);
+        // Encounter-start and start-of-turn periods are left to dnd5e.
+        assert.notEqual(preCombatRecovery({ combat: sideCombat }, ["encounter"]), false);
+        assert.notEqual(preCombatRecovery({ combat: sideCombat }, ["turnStart"]), false);
     } finally {
         env.restore();
     }
 });
 
-test("dnd5e's end-of-turn legendary recovery is suppressed for side combats", () => {
-    const combat = createCombat([], "monsters");
-    const combatant = { id: "npc-1", parent: combat };
-    const results = {
-        actor: { "system.resources.legact.value": 3, "system.attributes.hp.value": 10 },
-        item: [],
-        rolls: []
-    };
-
-    const env = installGlobals({ combat });
+test("preCombatRecovery handler leaves non-side combats alone", () => {
+    const nonSideCombat: any = { id: "c", started: true, combatants: [], getFlag: () => null };
+    const env = installGlobals({ combat: nonSideCombat });
     try {
         registerDnd5eIntegration();
-        const [combatRecovery] = env.hooks.get("dnd5e.combatRecovery");
-        combatRecovery(combatant, ["turnEnd"], results);
-
-        assert.equal("system.resources.legact.value" in results.actor, false);
-        // Other recovery (item uses, unrelated actor fields) is left intact.
-        assert.equal(results.actor["system.attributes.hp.value"], 10);
-    } finally {
-        env.restore();
-    }
-});
-
-test("dnd5e's end-of-turn legendary recovery is left intact for non-side combats", () => {
-    const combat: any = { id: "combat-1", round: 1, started: true, combatants: [], getFlag: () => null };
-    const combatant = { id: "npc-1", parent: combat };
-    const results = { actor: { "system.resources.legact.value": 3 }, item: [], rolls: [] };
-
-    const env = installGlobals({ combat });
-    try {
-        registerDnd5eIntegration();
-        const [combatRecovery] = env.hooks.get("dnd5e.combatRecovery");
-        combatRecovery(combatant, ["turnEnd"], results);
-
-        assert.equal(results.actor["system.resources.legact.value"], 3);
-    } finally {
-        env.restore();
-    }
-});
-
-test("encounter-start legendary recovery is not suppressed", () => {
-    const combat = createCombat([], "monsters");
-    const combatant = { id: "npc-1", parent: combat };
-    const results = { actor: { "system.resources.legact.value": 3 }, item: [], rolls: [] };
-
-    const env = installGlobals({ combat });
-    try {
-        registerDnd5eIntegration();
-        const [combatRecovery] = env.hooks.get("dnd5e.combatRecovery");
-        combatRecovery(combatant, ["encounter"], results);
-
-        assert.equal(results.actor["system.resources.legact.value"], 3);
-    } finally {
-        env.restore();
-    }
-});
-
-test("the combatRecovery hook is harmless when there is no legact key to remove", () => {
-    const combat = createCombat([], "monsters");
-    const combatant = { id: "npc-1", parent: combat };
-    const results = { actor: { "system.attributes.hp.value": 10 }, item: [], rolls: [] };
-
-    const env = installGlobals({ combat });
-    try {
-        registerDnd5eIntegration();
-        const [combatRecovery] = env.hooks.get("dnd5e.combatRecovery");
-        combatRecovery(combatant, ["turnEnd"], results);
-
-        assert.deepEqual(results.actor, { "system.attributes.hp.value": 10 });
+        const [preCombatRecovery] = env.hooks.get("dnd5e.preCombatRecovery");
+        assert.notEqual(preCombatRecovery({ combat: nonSideCombat }, ["turnEnd"]), false);
     } finally {
         env.restore();
     }
