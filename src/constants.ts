@@ -5,6 +5,7 @@ export const COMBATANT_SIDE_FLAG = "sideId";
 export const COMBATANT_SIDE_SOURCE_FLAG = "sideSource";
 export const COMMANDER_CONTROL_SETTING = "commanderControl";
 export const INITIATIVE_METHOD_SETTING = "initiativeMethod";
+export const LEGENDARY_ACTION_WINDOWS_SETTING = "useLegendaryActionWindows";
 export const SOCKET_EVENT = `module.${MODULE_ID}`;
 
 export const COMMANDER_CONTROL_OPTIONS = {
@@ -36,5 +37,6 @@ export const SETTINGS = {
     groupByDisposition: "groupByDisposition",
     showTrackerControls: "showTrackerControls",
     commanderControl: COMMANDER_CONTROL_SETTING,
-    initiativeMethod: INITIATIVE_METHOD_SETTING
+    initiativeMethod: INITIATIVE_METHOD_SETTING,
+    legendaryActionWindows: LEGENDARY_ACTION_WINDOWS_SETTING
 } as const;

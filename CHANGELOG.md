@@ -3,6 +3,7 @@
 ### 🚀 Features
 
 - Chris' premades (CPR) integration
+- Legendary Action Windows: prompt the GM for legendary actions during the active side's turn (Actions only, Extra Attack aware)
 
 ### 🐛 Bug Fixes
 

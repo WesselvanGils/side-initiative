@@ -37,6 +37,15 @@ Commander changes default to side owners and can be restricted to the GM in the 
 - The active side's tokens keep their OA region enabled while their side is active so the side can still make opportunity attacks during that phase.
 - If you use side initiative, keep Gambits Premades Opportunity Attack disabled only when the compatibility warning reports an unsupported Gambits build.
 
+## Legendary Action Windows
+
+Because every creature on a side acts at once, Chris' Premades' usual end-of-turn legendary-action prompt never fires in side initiative (it relies on the per-creature turn advance that side initiative replaces). Enable **Use Legendary Action Windows** in the module settings to restore it in a side-aware way.
+
+- Whenever a creature on the active side finishes an **Action**, the GM is prompted (through Chris' Premades' own dialog and workflow) whether any opposing legendary monster wants to spend a legendary action. Spending one this way does **not** consume the monster's reaction.
+- Only Actions open a window — bonus actions and reactions intentionally do not, to avoid flooding the GM with prompts.
+- **Extra Attack** is honoured: a weapon Attack action only opens a window once the actor has made all of its attacks for that action. The expected count is read from the actor's features (`Extra Attack` = 2, `Two Extra Attacks` = 3, `Three Extra Attacks` = 4).
+- Requires both Chris' Premades and MidiQOL. Detection runs on MidiQOL's activity workflows; a few utility actions MidiQOL does not workflow may not open a window.
+
 ## Development
 
 The module is written in TypeScript under `src/` and compiled to `scripts/`,

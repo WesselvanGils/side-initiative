@@ -3,6 +3,7 @@ import { SideInitiativeAPI, handleCommanderSocketRequest } from "./api.js";
 import { installCombatPatches } from "./controller/combat-controller.js";
 import { registerChrisPremadesIntegration } from "./integration/chris-premades.js";
 import { registerGambitsPremadesIntegration } from "./integration/gambits-premades.js";
+import { registerLegendaryActionsIntegration } from "./integration/legendary-actions.js";
 import { registerMidiQolIntegration } from "./integration/midi-qol.js";
 import { addCombatantContextOptions, renderCombatTracker } from "./ui/tracker.js";
 import { getSideInitiative, getSetting, hooks, isActiveGMClient, setSideInitiative } from "./runtime.js";
@@ -58,6 +59,15 @@ function registerSettings(): void {
             [INITIATIVE_METHOD_OPTIONS.weightedAverage]: "SIDE-INITIATIVE.Settings.InitiativeMethod.WeightedAverage"
         },
         default: INITIATIVE_METHOD_OPTIONS.sideD20
+    });
+
+    settings?.register?.(MODULE_ID, SETTINGS.legendaryActionWindows, {
+        name: "SIDE-INITIATIVE.Settings.LegendaryActionWindows.Name",
+        hint: "SIDE-INITIATIVE.Settings.LegendaryActionWindows.Hint",
+        scope: "world",
+        config: true,
+        type: Boolean,
+        default: false
     });
 }
 
@@ -139,4 +149,5 @@ Hooks.once("ready", () => {
     if (game?.modules?.get?.("midi-qol")?.active) {
         registerMidiQolIntegration();
     }
+    registerLegendaryActionsIntegration();
 });
