@@ -17,3 +17,7 @@ release version:
     git tag "{{version}}"
 
     git push origin main "{{version}}"
+
+update:
+    git pull
+    npm run build
