@@ -280,6 +280,25 @@ test("getSideRepresentativeCombatant falls back when the commander is defeated",
     assert.equal(getSideRepresentativeCombatant(combat, "players"), playerOne);
 });
 
+test("getSideRepresentativeCombatant picks the highest-weight member when no commander is set", () => {
+    const goblin = createCombatant({ id: "goblin", disposition: -1, sideId: "monsters", actorXp: 50 });
+    const warlord = createCombatant({ id: "warlord", disposition: -1, sideId: "monsters", actorXp: 2300 });
+    const orc = createCombatant({ id: "orc", disposition: -1, sideId: "monsters", actorXp: 450 });
+    const combat = createCombat(
+        [goblin, warlord, orc],
+        {
+            activeSideId: "monsters",
+            order: ["monsters"],
+            sides: {
+                monsters: { id: "monsters", combatantIds: ["goblin", "warlord", "orc"] }
+            }
+        },
+        [goblin, warlord, orc]
+    );
+
+    assert.equal(getSideRepresentativeCombatant(combat, "monsters"), warlord);
+});
+
 test("setSideCommander updates the commander and active turn for the active side", async () => {
     const playerOne = createCombatant({ id: "pc-1", hasPlayerOwner: true, disposition: 1, sideId: "players" });
     const playerTwo = createCombatant({ id: "pc-2", hasPlayerOwner: true, disposition: 1, sideId: "players" });

@@ -579,7 +579,29 @@ export function getSideColor(sideId: string): string {
 }
 
 /**
- * Resolve a representative combatant for a side.
+ * Pick the combatant with the highest initiative weight from a list. For
+ * player-owned combatants the weight is always 1, so this only reorders NPC
+ * sides — where the heaviest creature (highest XP/CR) is treated as the side's
+ * de-facto leader. Ties keep the first occurrence, so ordering stays stable.
+ */
+function pickHighestWeightCombatant(combatants: CombatantLike[]): CombatantLike | null {
+    let best: CombatantLike | null = null;
+    let bestWeight = Number.NEGATIVE_INFINITY;
+    for (const combatant of combatants) {
+        if (!combatant) continue;
+        const weight = getCombatantInitiativeWeight(combatant);
+        if (weight > bestWeight) {
+            bestWeight = weight;
+            best = combatant;
+        }
+    }
+    return best;
+}
+
+/**
+ * Resolve a representative combatant for a side. The configured commander wins;
+ * otherwise the highest-weight member leads (the strongest creature, not an
+ * arbitrary first entry).
  */
 export function getSideRepresentativeCombatant(
     combat: CombatLike | null | undefined,
@@ -593,12 +615,12 @@ export function getSideRepresentativeCombatant(
         if (!combatant || combatant.defeated) return false;
         return getCombatantSideId(combatant, { groupByDisposition }) === normalizedId;
     });
-    if (turnMembers.length) return turnMembers[0];
+    if (turnMembers.length) return pickHighestWeightCombatant(turnMembers) ?? turnMembers[0];
 
     const activeMembers = getCombatantsForSide(combat, sideId, { includeDefeated: false, groupByDisposition });
-    if (activeMembers.length) return activeMembers[0];
+    if (activeMembers.length) return pickHighestWeightCombatant(activeMembers) ?? activeMembers[0];
     const allMembers = getCombatantsForSide(combat, sideId, { includeDefeated: true, groupByDisposition });
-    return allMembers[0] ?? null;
+    return pickHighestWeightCombatant(allMembers) ?? allMembers[0] ?? null;
 }
 
 /**

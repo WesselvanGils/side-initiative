@@ -515,13 +515,13 @@ const DOCK_TEMPLATE = `
       </div>
     </div>
   </div>
-  <div class="side-dock-controls">
-    <button type="button" class="side-dock-control" data-action="reset"><i class="fas fa-rotate-left"></i></button>
-    <button type="button" class="side-dock-control" data-action="roll-init"><i class="fas fa-dice-d20"></i></button>
+  <div class="side-dock-controls faded-ui">
+    <button type="button" class="side-dock-control ui-control" data-action="reset"><i class="fa-solid fa-rotate-left"></i></button>
+    <button type="button" class="side-dock-control ui-control" data-action="roll-init"><i class="fa-solid fa-dice-d20"></i></button>
     <span class="side-dock-control-gap" aria-hidden="true"></span>
-    <button type="button" class="side-dock-control" data-action="start-combat"><i class="fas fa-play"></i></button>
-    <button type="button" class="side-dock-control" data-action="end-combat"><i class="fas fa-stop"></i></button>
-    <button type="button" class="side-dock-control" data-action="advance"><i class="fas fa-forward"></i></button>
+    <button type="button" class="side-dock-control ui-control" data-action="start-combat"><i class="fa-solid fa-play"></i></button>
+    <button type="button" class="side-dock-control ui-control" data-action="end-combat"><i class="fa-solid fa-stop"></i></button>
+    <button type="button" class="side-dock-control ui-control" data-action="advance"><i class="fa-solid fa-forward"></i></button>
   </div>
 `;
 
