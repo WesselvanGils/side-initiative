@@ -5,7 +5,6 @@ import {
     getSideLabel,
     getSideRepresentativeCombatant,
     getSideSummary,
-    isSideCombat,
     normalizeSideId
 } from "../logic.js";
 import { getSideInitiative, getSetting, hooks } from "../runtime.js";
@@ -139,7 +138,10 @@ export function getDockState(combat: CombatLike | null | undefined, options: Doc
     const groupByDisposition = options.groupByDisposition ?? true;
     const activeSideId = getActiveSideId(combat, { groupByDisposition });
 
-    const visible = Boolean(enabled && combat && isSideCombat(combat));
+    // The dock appears as soon as a combat exists in the current scene — even
+    // before it is started or sides are rolled — so representatives are derived
+    // from disposition. It hides again once the combat is deleted.
+    const visible = Boolean(enabled && combat);
     const started = Boolean(combat?.started);
     const round = Number.isFinite(combat?.round) ? (combat?.round as number) : null;
 
@@ -419,6 +421,10 @@ export class CombatDockManager {
         this.toggleControl(el, "roll-init", manage);
         this.toggleControl(el, "reset", manage);
 
+        // The gap separates the roll group from the combat group; only relevant
+        // when the combat controls are visible (i.e. for a manager).
+        el.querySelector(".side-dock-control-gap")?.classList.toggle(DOCK_HIDDEN_CLASS, !manage);
+
         const advance = el.querySelector('[data-action="advance"]') as HTMLButtonElement | null;
         if (advance) {
             advance.classList.toggle(DOCK_HIDDEN_CLASS, !canAdvance);
@@ -510,11 +516,12 @@ const DOCK_TEMPLATE = `
     </div>
   </div>
   <div class="side-dock-controls">
+    <button type="button" class="side-dock-control" data-action="reset"><i class="fas fa-rotate-left"></i></button>
+    <button type="button" class="side-dock-control" data-action="roll-init"><i class="fas fa-dice-d20"></i></button>
+    <span class="side-dock-control-gap" aria-hidden="true"></span>
     <button type="button" class="side-dock-control" data-action="start-combat"><i class="fas fa-play"></i></button>
     <button type="button" class="side-dock-control" data-action="end-combat"><i class="fas fa-stop"></i></button>
-    <button type="button" class="side-dock-control" data-action="roll-init"><i class="fas fa-dice-d20"></i></button>
     <button type="button" class="side-dock-control" data-action="advance"><i class="fas fa-forward"></i></button>
-    <button type="button" class="side-dock-control" data-action="reset"><i class="fas fa-rotate-left"></i></button>
   </div>
 `;
 

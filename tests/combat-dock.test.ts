@@ -174,17 +174,17 @@ test("getDockState is hidden when the feature is disabled", () => {
     assert.equal(state.visible, false);
 });
 
-test("getDockState is hidden for a combat that is not under side control", () => {
+test("getDockState is visible as soon as a combat exists, even before sides are rolled", () => {
     const combatants = [
         makeCombatant({ id: "pc-1", sideId: "players" }),
         makeCombatant({ id: "npc-1", sideId: "monsters" })
     ];
     const map = new Map(combatants.map((combatant) => [combatant.id as string, combatant]));
     const combat = {
-        id: "combat-plain",
-        round: 1,
+        id: "combat-new",
+        round: 0,
         turn: 0,
-        started: true,
+        started: false,
         combatants: map,
         turns: combatants,
         getFlag() {
@@ -194,7 +194,8 @@ test("getDockState is hidden for a combat that is not under side control", () =>
 
     const state = getDockState(combat);
 
-    assert.equal(state.visible, false);
+    assert.equal(state.visible, true);
+    assert.equal(state.started, false);
 });
 
 test("getDockState reports the round and started flag from the combat", () => {
