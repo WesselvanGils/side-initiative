@@ -2,12 +2,41 @@
 
 ### 🚀 Features
 
-- Chris' premades (CPR) integration
-- Legendary Action Windows: prompt the GM for legendary actions during the active side's turn (Actions only, Extra Attack aware)
+- Legendary actions windows (LAWs)
+- Just script for updating dev repo on server
+- Combat tracker (inspired by carousal combat tracker)
+- Combat tracker can now use the D&D5e primary party art
 
 ### 🐛 Bug Fixes
 
-- Recover legendary actions at the start of a side's turn (for every creature on the side) instead of at the end of the representative's turn, and suppress dnd5e's native end-of-turn recovery for side combats so it happens once
+- Legendary actions recovering at the start of a round
+- No longer recover legendary actions on round end
+- Supress end of turn combatant recovery
+- CPR AOE templates now work correctly when a swapped commander is the only target
+- Test run of the new CPR logic
+- Shortened the description of the LAW setting
+- Updated UI to favor a wider aspect ratio
+- Updated tracker UI button to become opaque when hovered
+- Updated buttons again
+- Buttons now use foundry CSS classes
+- Buttons
+- Buttons again
+- Removed shadow from dock frame
+- *(ui)* Set image sizes for dock so first page load is consistent
+- Removed notification when rolling initiative
+
+### 📚 Documentation
+
+- Bug lies within CPR but is an edge case, will fix with v14
+
+### ⚙️ Miscellaneous Tasks
+
+- More temporary logs to resolve CPR issues
+## [1.2.0] - 2026-06-19
+
+### 🚀 Features
+
+- Chris' premades (CPR) integration
 
 ### 🐛 Bug Fixes
 
@@ -15,6 +44,10 @@
 - Template behavior for cauldron of plentiful resources integration
 - Midi-qol auto-untarget at end of turn being incompatible
 - Midi-qol auto-untarget again
+
+### 📚 Documentation
+
+- *(changelog)* Update changelog
 
 ### ⚙️ Miscellaneous Tasks
 
