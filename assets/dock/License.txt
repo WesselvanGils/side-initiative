@@ -1,0 +1,28 @@
+Side Initiative — Combat Dock art assets
+=========================================
+
+frame.png, divider.png
+-----------------------
+
+These images are taken from "Fantasy UI Borders" by Kenney (www.kenney.nl),
+creation date 2023-12-03, version 1.0.
+
+    License: Creative Commons Zero (CC0 1.0)
+    http://creativecommons.org/publicdomain/zero/1.0/
+
+    You can use this content for personal, educational, and commercial purposes.
+    Support by crediting "Kenney" or "www.kenney.nl" (this is not a requirement).
+
+Original source: https://kenney.nl/assets/fantasy-ui-borders
+
+CC0 means these images are dedicated to the public domain: no attribution is
+required, although credit to Kenney is appreciated. They are human-created art
+(not AI-generated), which complies with Foundry VTT's AI content policy.
+
+The rest of this module is licensed under the GNU General Public License v3 —
+see the project LICENSE file. These CC0 images remain CC0 regardless of the
+module license.
+
+To replace the frame with your own art, overwrite this file:
+    assets/dock/frame.png   (best as a 9-slice / 96x96 border tile; used via CSS border-image)
+    assets/dock/divider.png (the center ornament)

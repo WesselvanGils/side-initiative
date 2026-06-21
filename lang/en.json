@@ -39,5 +39,21 @@
     "SIDE-INITIATIVE.Notifications.NoActiveGM": "No active GM is available to process that commander change.",
     "SIDE-INITIATIVE.Notifications.GambitsOpportunityAttackIncompatible": "Gambits Premades Opportunity Attack is enabled, but it is not side-aware. Disable it when using Side Initiative.",
     "SIDE-INITIATIVE.Notifications.GambitsOpportunityAttackUnsupportedVersion": "Gambits Premades Opportunity Attack integration is disabled because the installed version ({version}) is not supported. Supported versions: {supported}.",
-    "SIDE-INITIATIVE.Notifications.GambitsOpportunityAttackSourceMismatch": "Gambits Premades Opportunity Attack integration is disabled because the installed source no longer matches the supported shape."
+    "SIDE-INITIATIVE.Notifications.GambitsOpportunityAttackSourceMismatch": "Gambits Premades Opportunity Attack integration is disabled because the installed source no longer matches the supported shape.",
+    "SIDE-INITIATIVE.Settings.UseCombatDock.Name": "Use combat dock",
+    "SIDE-INITIATIVE.Settings.UseCombatDock.Hint": "Show a docked combat tracker at the top of the screen that displays the two opposing sides' commanders facing each other, instead of the per-combatant list.",
+    "SIDE-INITIATIVE.Settings.CombatDockSize.Name": "Combat dock size",
+    "SIDE-INITIATIVE.Settings.CombatDockSize.Hint": "Size of the docked combat tracker.",
+    "SIDE-INITIATIVE.Settings.CombatDockSize.Tiny": "Tiny",
+    "SIDE-INITIATIVE.Settings.CombatDockSize.Small": "Small",
+    "SIDE-INITIATIVE.Settings.CombatDockSize.Medium": "Medium",
+    "SIDE-INITIATIVE.Settings.CombatDockSize.Large": "Large",
+    "SIDE-INITIATIVE.Settings.CombatDockSize.XLarge": "Extra large",
+    "SIDE-INITIATIVE.Settings.HideConflictingTopUI.Name": "Hide conflicting top UI",
+    "SIDE-INITIATIVE.Settings.HideConflictingTopUI.Hint": "Automatically hide other UIs docked to the top of the screen (for example the DnD5e calendar) while the combat dock is visible, to avoid clutter. The scene navigation and player list are kept.",
+    "SIDE-INITIATIVE.UI.DockStartCombat": "Begin combat",
+    "SIDE-INITIATIVE.UI.DockEndCombat": "End combat",
+    "SIDE-INITIATIVE.UI.DockRollInitiative": "Roll side initiative",
+    "SIDE-INITIATIVE.UI.DockAdvanceSide": "Advance to the next side",
+    "SIDE-INITIATIVE.UI.DockResetInitiative": "Reset initiative"
 }

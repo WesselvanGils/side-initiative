@@ -9,6 +9,7 @@ Foundry VTT module for the 2014 DMG side initiative variant.
 - Rerolls tied side totals until the tie breaks.
 - Keeps combatant side assignments on combatant flags.
 - Adds combat tracker controls for side rolling and editing.
+- Optional **combat dock**: a top-of-screen tracker that shows the two opposing sides' commanders facing each other instead of the per-combatant list.
 - Uses a MidiQOL reaction hook to keep same-side actors from being charged a reaction while their side is active.
 
 ## Usage
@@ -47,6 +48,19 @@ Because every creature on a side acts at once, Chris' Premades' usual end-of-tur
 - Requires both Chris' Premades and MidiQOL. Detection runs on MidiQOL's activity workflows; a few utility actions MidiQOL does not workflow may not open a window.
 
 Legendary actions are also recovered at the **start** of a side's turn for every creature on that side, complete with dnd5e's recovery chat card, and dnd5e's native end-of-turn recovery is suppressed for side combats so it only happens once. (dnd5e normally recovers them — with a chat card — at the end of a single creature's turn, which in side initiative only ever reaches the side's representative, so they recovered at the wrong time, posted the card at the wrong time, and other legendary creatures never recovered at all. This is always on for side combats; it is not tied to the Legendary Action Windows setting.)
+
+## Combat Dock
+
+Enable **Use combat dock** in the module settings to replace the per-combatant combat tracker with a compact, top-of-screen dock. It shows the **players'** commander on the left and the **monsters'** commander on the right, facing each other inside a fantasy frame, with the current round between them.
+
+- The portrait for each side is the side's **commander** (the crowned representative). Change a side's commander and the dock artwork updates automatically.
+- The **active side** gets a glowing highlight, with a flow sweep when the turn passes from one side to the other.
+- When the active side is neither players nor monsters (for example an *allies* or *neutral* side), the **center divider** is highlighted instead.
+- Controls let the GM (or anyone with combat-tracker permission) **start/end combat**, **roll side initiative**, **advance** to the next side, and **reset initiative**. Players who control the active side's commander can also advance.
+- While the dock is visible, other UIs docked to the top of the screen (for example the DnD5e calendar) are hidden to avoid clutter; the scene navigation and player list are kept. This can be turned off with **Hide conflicting top UI**.
+- **Combat dock size** scales the dock from *tiny* to *extra large*.
+
+The frame and divider artwork is from Kenney's *Fantasy UI Borders* pack, which is **CC0** (public domain, no attribution required, human-created). See `assets/dock/License.txt`. To use your own frame, overwrite `assets/dock/frame.png` (a 9-slice border tile works best) and `assets/dock/divider.png`.
 
 ## Development
 

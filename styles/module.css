@@ -107,3 +107,323 @@
     width: 100%;
     box-sizing: border-box;
 }
+
+/* =========================================================================
+   Side Initiative — Combat Dock
+   A top-of-screen, fantasy-framed tracker showing the two opposing sides'
+   commanders facing each other. Frame art is CC0 (Kenney "Fantasy UI Borders").
+   ========================================================================= */
+
+.side-initiative-combat-dock {
+    position: fixed;
+    top: 4px;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 100;
+    pointer-events: none;
+}
+
+.side-initiative-combat-dock.side-dock-hidden {
+    display: none;
+}
+
+.side-initiative-combat-dock .side-dock-hidden {
+    display: none !important;
+}
+
+/* Dock size presets. --side-dock-size is the portrait card width; the frame
+   border, radii and font all scale from it so the dock stays proportional. */
+.side-initiative-combat-dock.side-dock-size-tiny {
+    --side-dock-size: 96px;
+    --side-dock-border-width: 12px;
+    --side-dock-radius: 8px;
+    --side-dock-font: 0.78rem;
+}
+.side-initiative-combat-dock.side-dock-size-small {
+    --side-dock-size: 140px;
+    --side-dock-border-width: 15px;
+    --side-dock-radius: 10px;
+    --side-dock-font: 0.88rem;
+}
+.side-initiative-combat-dock.side-dock-size-medium {
+    --side-dock-size: 192px;
+    --side-dock-border-width: 20px;
+    --side-dock-radius: 12px;
+    --side-dock-font: 1rem;
+}
+.side-initiative-combat-dock.side-dock-size-large {
+    --side-dock-size: 256px;
+    --side-dock-border-width: 24px;
+    --side-dock-radius: 14px;
+    --side-dock-font: 1.12rem;
+}
+.side-initiative-combat-dock.side-dock-size-xlarge {
+    --side-dock-size: 320px;
+    --side-dock-border-width: 30px;
+    --side-dock-radius: 16px;
+    --side-dock-font: 1.3rem;
+}
+
+.side-dock-frame {
+    position: relative;
+    pointer-events: all;
+    display: flex;
+    flex-direction: column;
+    gap: calc(var(--side-dock-size) * 0.05);
+    padding: calc(var(--side-dock-border-width) * 0.8);
+    border-radius: var(--side-dock-radius);
+    background:
+        radial-gradient(120% 100% at 50% 0%, rgba(80, 60, 30, 0.35), transparent 60%),
+        linear-gradient(180deg, #2b2118 0%, #1a140d 70%, #120d08 100%);
+    box-shadow:
+        0 10px 30px rgba(0, 0, 0, 0.6),
+        inset 0 0 40px rgba(0, 0, 0, 0.5);
+}
+
+/* The CC0 border ring, drawn on a pseudo so its gold tint (filter) does not
+   bleed into the portrait content. Transparent center (no `fill`). */
+.side-dock-frame::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    border: var(--side-dock-border-width) solid transparent;
+    border-image: url("/modules/side-initiative/assets/dock/frame.png") 33% stretch;
+    border-radius: var(--side-dock-radius);
+    filter: sepia(1) saturate(4.5) hue-rotate(-12deg) brightness(1.05) contrast(1.05);
+    pointer-events: none;
+    z-index: 1;
+}
+
+.side-dock-frame > * {
+    position: relative;
+    z-index: 2;
+}
+
+.side-dock-content {
+    display: flex;
+    align-items: stretch;
+    justify-content: center;
+    gap: calc(var(--side-dock-size) * 0.08);
+}
+
+.side-dock-side {
+    position: relative;
+    isolation: isolate;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: calc(var(--side-dock-size) * 0.04);
+    padding: calc(var(--side-dock-size) * 0.04);
+    border-radius: calc(var(--side-dock-radius) * 0.8);
+    transition: box-shadow 0.3s ease, transform 0.3s ease;
+    --side-dock-color: #caa64a;
+}
+
+.side-dock-portrait {
+    width: var(--side-dock-size);
+    height: calc(var(--side-dock-size) * 1.12);
+    overflow: hidden;
+    border-radius: calc(var(--side-dock-radius) * 0.7);
+    border: 2px solid rgba(0, 0, 0, 0.6);
+    box-shadow: inset 0 0 0 1px rgba(255, 215, 0, 0.18), 0 4px 10px rgba(0, 0, 0, 0.5);
+    background: #0c0906;
+}
+
+.side-dock-portrait-img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    object-position: center top;
+    display: block;
+}
+
+.side-dock-portrait-img[hidden] {
+    display: none;
+}
+
+/* Commanders face each other: mirror the monsters' art toward the players. */
+.side-dock-side[data-side="monsters"] .side-dock-portrait-img {
+    transform: scaleX(-1);
+}
+
+.side-dock-label {
+    font-size: var(--side-dock-font);
+    font-weight: 700;
+    text-align: center;
+    color: #f3e7c8;
+    text-shadow: 0 1px 3px rgba(0, 0, 0, 0.9);
+    max-width: var(--side-dock-size);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.side-dock-meta {
+    font-size: calc(var(--side-dock-font) * 0.72);
+    color: rgba(243, 231, 200, 0.6);
+}
+
+.side-dock-side.is-empty .side-dock-portrait {
+    filter: grayscale(1) brightness(0.45);
+}
+
+/* Steady active-side highlight: a glowing, breathing halo in the side's color. */
+.side-dock-side::after {
+    content: "";
+    position: absolute;
+    inset: -4px;
+    border-radius: inherit;
+    background: conic-gradient(
+        from 0deg,
+        var(--side-dock-color),
+        rgba(255, 215, 0, 0.9),
+        var(--side-dock-color),
+        transparent,
+        var(--side-dock-color)
+    );
+    opacity: 0;
+    filter: blur(3px);
+    z-index: -1;
+    transition: opacity 0.35s ease;
+    pointer-events: none;
+}
+
+.side-dock-side.is-active {
+    transform: translateY(-2px);
+    box-shadow: 0 0 22px 1px var(--side-dock-color);
+}
+
+.side-dock-side.is-active::after {
+    opacity: 0.85;
+    animation: side-dock-breathe 2.6s ease-in-out infinite;
+}
+
+@keyframes side-dock-breathe {
+    0%, 100% { opacity: 0.45; }
+    50% { opacity: 0.95; }
+}
+
+/* Center divider between the two sides. */
+.side-dock-divider {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: calc(var(--side-dock-size) * 0.05);
+    width: calc(var(--side-dock-size) * 0.22);
+    align-self: stretch;
+}
+
+.side-dock-divider::before {
+    content: "";
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    left: 50%;
+    width: 2px;
+    transform: translateX(-50%);
+    background: linear-gradient(
+        180deg,
+        transparent,
+        rgba(255, 215, 0, 0.25) 20%,
+        rgba(255, 215, 0, 0.4) 50%,
+        rgba(255, 215, 0, 0.25) 80%,
+        transparent
+    );
+    transition: background 0.35s ease, box-shadow 0.35s ease;
+}
+
+.side-dock-divider-ornament {
+    position: relative;
+    width: calc(var(--side-dock-size) * 0.2);
+    height: calc(var(--side-dock-size) * 0.06);
+    background: url("/modules/side-initiative/assets/dock/divider.png") center / contain no-repeat;
+    filter: sepia(1) saturate(4.5) hue-rotate(-12deg) brightness(1.05);
+    opacity: 0.5;
+    transition: opacity 0.35s ease, filter 0.35s ease;
+}
+
+.side-dock-round {
+    position: relative;
+    min-width: calc(var(--side-dock-size) * 0.28);
+    height: calc(var(--side-dock-size) * 0.28);
+    padding: 0 calc(var(--side-dock-size) * 0.04);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 50%;
+    background: radial-gradient(circle at 35% 30%, #3a2c18, #160f07);
+    border: 2px solid rgba(255, 215, 0, 0.45);
+    box-shadow: 0 0 8px rgba(0, 0, 0, 0.6);
+    color: #f3e7c8;
+    font-size: calc(var(--side-dock-font) * 0.9);
+    font-weight: 700;
+    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.9);
+}
+
+/* When the active side is neither players nor monsters, highlight the divider. */
+.side-dock-divider.is-active::before {
+    background: linear-gradient(
+        180deg,
+        transparent,
+        rgba(255, 215, 0, 0.7) 15%,
+        rgba(255, 240, 180, 1) 50%,
+        rgba(255, 215, 0, 0.7) 85%,
+        transparent
+    );
+    box-shadow: 0 0 14px rgba(255, 215, 0, 0.8);
+}
+
+.side-dock-divider.is-active .side-dock-divider-ornament {
+    opacity: 1;
+}
+
+.side-dock-divider.is-active .side-dock-round {
+    border-color: rgba(255, 240, 180, 0.95);
+    box-shadow: 0 0 16px rgba(255, 215, 0, 0.85);
+}
+
+/* Control buttons. */
+.side-dock-controls {
+    display: flex;
+    justify-content: center;
+    gap: calc(var(--side-dock-size) * 0.04);
+}
+
+.side-dock-control {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: calc(var(--side-dock-font) * 2.4);
+    height: calc(var(--side-dock-font) * 2.4);
+    padding: 0 calc(var(--side-dock-size) * 0.05);
+    border-radius: calc(var(--side-dock-radius) * 0.6);
+    border: 1px solid rgba(255, 215, 0, 0.35);
+    background: linear-gradient(180deg, rgba(70, 52, 26, 0.9), rgba(30, 22, 12, 0.95));
+    color: #f3e7c8;
+    font-size: var(--side-dock-font);
+    cursor: pointer;
+    transition: background 0.2s ease, box-shadow 0.2s ease, transform 0.1s ease;
+}
+
+.side-dock-control:hover {
+    background: linear-gradient(180deg, rgba(110, 82, 40, 0.95), rgba(50, 36, 18, 0.98));
+    box-shadow: 0 0 12px rgba(255, 215, 0, 0.5);
+}
+
+.side-dock-control:active {
+    transform: translateY(1px);
+}
+
+.side-dock-control:disabled {
+    opacity: 0.4;
+    cursor: default;
+}
+
+/* While the dock is visible, hide other UIs docked to the top of the screen
+   (e.g. the DnD5e calendar / SmallTime) to avoid clutter — but keep the core
+   scene navigation, player list and logo. Mirrors combat-tracker-dock. */
+#ui-top.side-initiative-hide-conflicting:has(#side-initiative-combat-dock:not(.side-dock-hidden)) > *:not(#side-initiative-combat-dock):not(#loading):not(#navigation):not(#players):not(#logo) {
+    display: none !important;
+}

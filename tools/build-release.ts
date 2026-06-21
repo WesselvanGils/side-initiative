@@ -14,7 +14,8 @@ const RELEASE_ENTRIES = [
     "LICENSE",
     "scripts",
     "styles",
-    "lang"
+    "lang",
+    "assets"
 ];
 
 interface NormalizedTag {

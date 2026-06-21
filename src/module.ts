@@ -1,4 +1,4 @@
-import { COMMANDER_CONTROL_OPTIONS, INITIATIVE_METHOD_OPTIONS, MODULE_ID, SETTINGS, SOCKET_EVENT } from "./constants.js";
+import { COMMANDER_CONTROL_OPTIONS, COMBAT_DOCK_SIZE_OPTIONS, INITIATIVE_METHOD_OPTIONS, MODULE_ID, SETTINGS, SOCKET_EVENT } from "./constants.js";
 import { SideInitiativeAPI, handleCommanderSocketRequest } from "./api.js";
 import { installCombatPatches } from "./controller/combat-controller.js";
 import { registerChrisPremadesIntegration } from "./integration/chris-premades.js";
@@ -6,6 +6,7 @@ import { registerDnd5eIntegration } from "./integration/dnd5e.js";
 import { registerGambitsPremadesIntegration } from "./integration/gambits-premades.js";
 import { registerLegendaryActionsIntegration } from "./integration/legendary-actions.js";
 import { registerMidiQolIntegration } from "./integration/midi-qol.js";
+import { getCombatDock, registerCombatDock } from "./ui/combat-dock.js";
 import { addCombatantContextOptions, renderCombatTracker } from "./ui/tracker.js";
 import { getSideInitiative, getSetting, hooks, isActiveGMClient, setSideInitiative } from "./runtime.js";
 import type { CombatLike } from "./types.js";
@@ -70,6 +71,47 @@ function registerSettings(): void {
         type: Boolean,
         default: false
     });
+
+    settings?.register?.(MODULE_ID, SETTINGS.useCombatDock, {
+        name: "SIDE-INITIATIVE.Settings.UseCombatDock.Name",
+        hint: "SIDE-INITIATIVE.Settings.UseCombatDock.Hint",
+        scope: "world",
+        config: true,
+        type: Boolean,
+        default: false,
+        onChange: (value: unknown) => {
+            const dock = getCombatDock();
+            if (!value) dock.unmount();
+            else dock.requestRefresh();
+        }
+    });
+
+    settings?.register?.(MODULE_ID, SETTINGS.combatDockSize, {
+        name: "SIDE-INITIATIVE.Settings.CombatDockSize.Name",
+        hint: "SIDE-INITIATIVE.Settings.CombatDockSize.Hint",
+        scope: "world",
+        config: true,
+        type: String,
+        choices: {
+            [COMBAT_DOCK_SIZE_OPTIONS.tiny]: "SIDE-INITIATIVE.Settings.CombatDockSize.Tiny",
+            [COMBAT_DOCK_SIZE_OPTIONS.small]: "SIDE-INITIATIVE.Settings.CombatDockSize.Small",
+            [COMBAT_DOCK_SIZE_OPTIONS.medium]: "SIDE-INITIATIVE.Settings.CombatDockSize.Medium",
+            [COMBAT_DOCK_SIZE_OPTIONS.large]: "SIDE-INITIATIVE.Settings.CombatDockSize.Large",
+            [COMBAT_DOCK_SIZE_OPTIONS.xlarge]: "SIDE-INITIATIVE.Settings.CombatDockSize.XLarge"
+        },
+        default: COMBAT_DOCK_SIZE_OPTIONS.medium,
+        onChange: () => getCombatDock().requestRefresh()
+    });
+
+    settings?.register?.(MODULE_ID, SETTINGS.hideConflictingTopUI, {
+        name: "SIDE-INITIATIVE.Settings.HideConflictingTopUI.Name",
+        hint: "SIDE-INITIATIVE.Settings.HideConflictingTopUI.Hint",
+        scope: "world",
+        config: true,
+        type: Boolean,
+        default: true,
+        onChange: () => getCombatDock().requestRefresh()
+    });
 }
 
 /**
@@ -128,6 +170,7 @@ function registerHooks(): void {
         await getSideInitiative()?.refreshCombatantSides?.(combat);
     });
     hooks()?.on("updateCombat", handleCombatStartedUpdate);
+    registerCombatDock();
 }
 
 Hooks.once("init", () => {
@@ -143,6 +186,7 @@ Hooks.once("ready", () => {
     if (game?.combat) {
         getSideInitiative()?.refreshCombatantSides?.(game.combat as CombatLike);
     }
+    getCombatDock().requestRefresh();
     registerDnd5eIntegration();
     registerGambitsPremadesIntegration();
     if (game?.modules?.get?.("chris-premades")?.active) {
