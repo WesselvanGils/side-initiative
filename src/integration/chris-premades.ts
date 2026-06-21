@@ -334,19 +334,7 @@ async function invokeTriggers(triggers: SortedTrigger[], ownerCombatantId: strin
     for (const trigger of triggers) {
         const triggerToken = trigger.token as { id?: string; uuid?: string; document?: { uuid?: string } } | null;
         const targetId = triggerToken?.id ?? triggerToken?.document?.uuid ?? triggerToken?.uuid ?? null;
-        const userTargetIds = Array.from((game as { user?: { targets?: Set<{ id?: string }> } } | null)?.user?.targets ?? []).map((token) => token.id);
-        debug(`    -> macro=${trigger.macroName} owner=${ownerCombatantId} target=${targetId} game.user.targets(before)=${JSON.stringify(userTargetIds)}`);
-        // HoH's damage activities are `target.prompt: true`, and syntheticActivityRoll
-        // ships `ignoreUserTargets` commented out — so midi-qol's completeActivityUse
-        // falls back to the live `game.user.targets` when the passed `targetUuids`
-        // don't resolve. After a commander switch that selection holds the former
-        // commander, redirecting the damage. Replace the target set with just this
-        // token via `canvas.tokens.setTargets` (the same call midi-qol's own
-        // updateUserTargets uses) — one call that replaces, so no accumulation that
-        // would trip the "target at most 1" guard on single-target activities.
-        if (targetId) {
-            (globalThis as { canvas?: { tokens?: { setTargets?(ids: string[], options?: unknown): unknown } } }).canvas?.tokens?.setTargets?.([targetId]);
-        }
+        debug(`    -> macro=${trigger.macroName} owner=${ownerCombatantId} target=${targetId}`);
         try {
             await trigger.macro({ trigger });
         } catch (error) {
