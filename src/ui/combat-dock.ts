@@ -515,14 +515,14 @@ const DOCK_TEMPLATE = `
       </div>
     </div>
   </div>
-  <div class="side-dock-controls faded-ui">
-    <button type="button" class="side-dock-control ui-control" data-action="reset"><i class="fa-solid fa-rotate-left"></i></button>
-    <button type="button" class="side-dock-control ui-control" data-action="roll-init"><i class="fa-solid fa-dice-d20"></i></button>
-    <span class="side-dock-control-gap" aria-hidden="true"></span>
-    <button type="button" class="side-dock-control ui-control" data-action="start-combat"><i class="fa-solid fa-play"></i></button>
-    <button type="button" class="side-dock-control ui-control" data-action="end-combat"><i class="fa-solid fa-stop"></i></button>
-    <button type="button" class="side-dock-control ui-control" data-action="advance"><i class="fa-solid fa-forward"></i></button>
-  </div>
+  <menu class="side-dock-controls">
+    <li><button type="button" class="ui-control icon fa-solid fa-rotate-left side-dock-control" data-action="reset"></button></li>
+    <li><button type="button" class="ui-control icon fa-solid fa-dice-d20 side-dock-control" data-action="roll-init"></button></li>
+    <li class="side-dock-control-gap" aria-hidden="true"></li>
+    <li><button type="button" class="ui-control icon fa-solid fa-play side-dock-control" data-action="start-combat"></button></li>
+    <li><button type="button" class="ui-control icon fa-solid fa-stop side-dock-control" data-action="end-combat"></button></li>
+    <li><button type="button" class="ui-control icon fa-solid fa-forward side-dock-control" data-action="advance"></button></li>
+  </menu>
 `;
 
 let manager: CombatDockManager | null = null;

@@ -409,51 +409,67 @@
     box-shadow: 0 0 16px rgba(255, 215, 0, 0.85);
 }
 
-/* Controls float below the frame, outside the border. The buttons themselves
-   are styled by Foundry's global `button.ui-control` rule (solid
-   --control-bg-color, 1px --control-border-color, 4px radius, hover state); we
-   do not override it. The list fades as a whole via opacity until hovered, the
-   same way Foundry fades its own control lists (scene nav, hotbar) via the
-   `faded-ui` pattern (`--ui-fade-opacity` → 1 on hover). */
+/* Controls float below the frame, outside the border. They are structured as a
+   Foundry control list (`menu > li > button.ui-control.icon`) so the global
+   `button.ui-control` styling applies. The menu is reset to a horizontal row. */
 .side-dock-controls {
     display: flex;
+    flex-direction: row;
     justify-content: center;
     align-items: center;
     gap: calc(var(--side-dock-font) * 0.3);
-    margin-top: calc(var(--side-dock-size) * 0.03);
+    margin: calc(var(--side-dock-size) * 0.03) 0 0;
+    padding: 0;
+    list-style: none;
     pointer-events: all;
-    opacity: var(--ui-fade-opacity, 0.4);
-    transition: opacity var(--ui-fade-duration, 0.5s) ease;
 }
 
-.side-dock-controls:hover,
-.side-dock-controls:focus-within {
-    opacity: 1;
-    transition: opacity 0.2s ease;
+.side-dock-controls > li {
+    list-style: none;
+    flex: none;
 }
 
-/* Lower-specificity fallback so the buttons stay solid even if Foundry's
-   `button.ui-control` rule were absent; uses the same variables Foundry sets on
-   `.ui-control` elements, so it resolves to the real theme color regardless. */
-.side-dock-control {
-    background: var(--control-bg-color, rgba(40, 48, 72, 0.9));
-    color: var(--control-icon-color, var(--color-text-light-primary, #e8e8e8));
-    border: 1px solid var(--control-border-color, var(--color-border-dark, #444));
+/* Visible separator between the roll group and the combat-control group. */
+.side-dock-controls > li.side-dock-control-gap {
+    width: 2px;
+    height: calc(var(--control-size, 32px) * 0.7);
+    align-self: center;
+    margin: 0 calc(var(--side-dock-font) * 1.1);
+    border-radius: 1px;
+    background: var(--color-cool-3, #584a75);
+}
+
+/* Guaranteed solid fill. This rule is dock-scoped (specificity 0,2,0) so it
+   beats Foundry's global `button.ui-control` (0,1,1) and the buttons can never
+   render transparent. It uses Foundry's own `--control-*` variables (set on
+   `.ui-control` elements) with the resolved default-theme colors as fallbacks,
+   so it matches the active theme. */
+.side-initiative-combat-dock .side-dock-control {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: var(--control-size, 32px);
+    height: var(--control-size, 32px);
+    flex: none;
+    background: var(--control-bg-color, rgba(11, 10, 19, 0.75));
+    border: 1px solid var(--control-border-color, #302831);
     border-radius: 4px;
+    color: var(--control-icon-color, #efe6d8);
+    font-size: var(--font-size-16, 1rem);
+    line-height: 1;
+    cursor: pointer;
+    transition: border 0.25s ease, color 0.25s ease, background 0.25s ease;
 }
 
-.side-dock-control:disabled {
+.side-initiative-combat-dock .side-dock-control:hover {
+    background: var(--control-hover-bg-color, #0b0a13);
+    border-color: var(--control-hover-border-color, #584a75);
+    color: var(--control-hover-icon-color, #f7f3e8);
+}
+
+.side-initiative-combat-dock .side-dock-control:disabled {
     opacity: 0.4;
     cursor: default;
-}
-
-/* Separator between the roll group and the combat-control group. */
-.side-dock-control-gap {
-    width: 1px;
-    align-self: stretch;
-    margin: 0 calc(var(--side-dock-font) * 1.25);
-    background: var(--control-border-color, var(--color-border-dark, #444));
-    opacity: 0.6;
 }
 
 /* While the dock is visible, hide other UIs docked to the top of the screen
