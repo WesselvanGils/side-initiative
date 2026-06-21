@@ -409,52 +409,37 @@
     box-shadow: 0 0 16px rgba(255, 215, 0, 0.85);
 }
 
-/* Controls float below the frame, outside the border. `faded-ui` mirrors the
-   Foundry control-list class so the buttons fade until the list is hovered. */
+/* Controls float below the frame, outside the border. The buttons themselves
+   are styled by Foundry's global `button.ui-control` rule (solid
+   --control-bg-color, 1px --control-border-color, 4px radius, hover state); we
+   do not override it. The list fades as a whole via opacity until hovered, the
+   same way Foundry fades its own control lists (scene nav, hotbar) via the
+   `faded-ui` pattern (`--ui-fade-opacity` → 1 on hover). */
 .side-dock-controls {
     display: flex;
     justify-content: center;
-    align-items: stretch;
+    align-items: center;
     gap: calc(var(--side-dock-font) * 0.3);
     margin-top: calc(var(--side-dock-size) * 0.03);
     pointer-events: all;
+    opacity: var(--ui-fade-opacity, 0.4);
+    transition: opacity var(--ui-fade-duration, 0.5s) ease;
 }
 
-/* Foundry-style controls: see-through black by default. The rules below are
-   written at higher specificity than Foundry's `.ui-control` so the faded
-   look is guaranteed whether or not Foundry's theme styles apply. */
-.side-dock-controls .side-dock-control {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    gap: 0.35em;
-    height: calc(var(--side-dock-font) * 2.2);
-    min-width: calc(var(--side-dock-font) * 2.2);
-    padding: 0 calc(var(--side-dock-font) * 0.55);
-    font-size: var(--side-dock-font);
-    line-height: 1;
-    color: var(--color-text-light-primary, #e8e8e8);
-    background: rgba(0, 0, 0, 0.4);
-    border: 1px solid var(--color-border-dark, #444);
-    border-radius: 3px;
-    cursor: pointer;
-    transition: border-color 0.15s ease, background 0.15s ease, box-shadow 0.15s ease;
+.side-dock-controls:hover,
+.side-dock-controls:focus-within {
+    opacity: 1;
+    transition: opacity 0.2s ease;
 }
 
-/* Hovering (or focusing) the list makes every button solid at once. */
-.side-dock-controls:hover .side-dock-control,
-.side-dock-controls:focus-within .side-dock-control {
-    background: rgba(0, 0, 0, 0.85);
-}
-
-.side-dock-controls:hover .side-dock-control:hover,
-.side-dock-controls:focus-within .side-dock-control:focus-visible {
-    border-color: var(--color-border-highlight, #c9a35a);
-    box-shadow: 0 0 6px rgba(0, 0, 0, 0.6);
-}
-
-.side-dock-control:active {
-    background: rgba(0, 0, 0, 0.95);
+/* Lower-specificity fallback so the buttons stay solid even if Foundry's
+   `button.ui-control` rule were absent; uses the same variables Foundry sets on
+   `.ui-control` elements, so it resolves to the real theme color regardless. */
+.side-dock-control {
+    background: var(--control-bg-color, rgba(40, 48, 72, 0.9));
+    color: var(--control-icon-color, var(--color-text-light-primary, #e8e8e8));
+    border: 1px solid var(--control-border-color, var(--color-border-dark, #444));
+    border-radius: 4px;
 }
 
 .side-dock-control:disabled {
@@ -467,7 +452,7 @@
     width: 1px;
     align-self: stretch;
     margin: 0 calc(var(--side-dock-font) * 1.25);
-    background: var(--color-border-dark, #444);
+    background: var(--control-border-color, var(--color-border-dark, #444));
     opacity: 0.6;
 }
 
