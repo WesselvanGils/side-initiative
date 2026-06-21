@@ -409,9 +409,13 @@
     box-shadow: 0 0 16px rgba(255, 215, 0, 0.85);
 }
 
-/* Controls float below the frame, outside the border. They are structured as a
-   Foundry control list (`menu > li > button.ui-control.icon`) so the global
-   `button.ui-control` styling applies. The menu is reset to a horizontal row. */
+/* Controls float below the frame, outside the border. They are a Foundry control
+   list (`menu.faded-ui > li > button.ui-control.plain.icon`): `faded-ui` fades
+   the whole list via opacity until hovered, and `button.ui-control` supplies the
+   solid fill + hover. We only reset the menu to a horizontal row and own the
+   opacity transition: Foundry's `.faded-ui` fades out with a 0.5s delay, which
+   reads as a pop/change after the hover transition, so we use a delay-free
+   transition and pin the layer to avoid a compositing pop at the end. */
 .side-dock-controls {
     display: flex;
     flex-direction: row;
@@ -422,6 +426,14 @@
     padding: 0;
     list-style: none;
     pointer-events: all;
+    opacity: var(--ui-fade-opacity, 0.4);
+    transition: opacity 0.35s ease;
+    will-change: opacity;
+}
+
+.side-dock-controls:hover,
+.side-dock-controls:focus-within {
+    opacity: 1;
 }
 
 .side-dock-controls > li {
@@ -429,47 +441,14 @@
     flex: none;
 }
 
-/* Visible separator between the roll group and the combat-control group. */
+/* Separator between the roll group and the combat-control group. */
 .side-dock-controls > li.side-dock-control-gap {
     width: 2px;
-    height: calc(var(--control-size, 32px) * 0.7);
+    height: calc(var(--control-size, 32px) * 0.6);
     align-self: center;
-    margin: 0 calc(var(--side-dock-font) * 1.1);
+    margin: 0 calc(var(--side-dock-font) * 2.5);
     border-radius: 1px;
     background: var(--color-cool-3, #584a75);
-}
-
-/* Guaranteed solid fill. This rule is dock-scoped (specificity 0,2,0) so it
-   beats Foundry's global `button.ui-control` (0,1,1) and the buttons can never
-   render transparent. It uses Foundry's own `--control-*` variables (set on
-   `.ui-control` elements) with the resolved default-theme colors as fallbacks,
-   so it matches the active theme. */
-.side-initiative-combat-dock .side-dock-control {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    width: var(--control-size, 32px);
-    height: var(--control-size, 32px);
-    flex: none;
-    background: var(--control-bg-color, rgba(11, 10, 19, 0.75));
-    border: 1px solid var(--control-border-color, #302831);
-    border-radius: 4px;
-    color: var(--control-icon-color, #efe6d8);
-    font-size: var(--font-size-16, 1rem);
-    line-height: 1;
-    cursor: pointer;
-    transition: border 0.25s ease, color 0.25s ease, background 0.25s ease;
-}
-
-.side-initiative-combat-dock .side-dock-control:hover {
-    background: var(--control-hover-bg-color, #0b0a13);
-    border-color: var(--control-hover-border-color, #584a75);
-    color: var(--control-hover-icon-color, #f7f3e8);
-}
-
-.side-initiative-combat-dock .side-dock-control:disabled {
-    opacity: 0.4;
-    cursor: default;
 }
 
 /* While the dock is visible, hide other UIs docked to the top of the screen

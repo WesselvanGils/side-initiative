@@ -515,13 +515,13 @@ const DOCK_TEMPLATE = `
       </div>
     </div>
   </div>
-  <menu class="side-dock-controls">
-    <li><button type="button" class="ui-control icon fa-solid fa-rotate-left side-dock-control" data-action="reset"></button></li>
-    <li><button type="button" class="ui-control icon fa-solid fa-dice-d20 side-dock-control" data-action="roll-init"></button></li>
+  <menu class="side-dock-controls faded-ui">
+    <li><button type="button" class="ui-control plain icon fa-solid fa-rotate-left" data-action="reset"></button></li>
+    <li><button type="button" class="ui-control plain icon fa-solid fa-dice-d20" data-action="roll-init"></button></li>
     <li class="side-dock-control-gap" aria-hidden="true"></li>
-    <li><button type="button" class="ui-control icon fa-solid fa-play side-dock-control" data-action="start-combat"></button></li>
-    <li><button type="button" class="ui-control icon fa-solid fa-stop side-dock-control" data-action="end-combat"></button></li>
-    <li><button type="button" class="ui-control icon fa-solid fa-forward side-dock-control" data-action="advance"></button></li>
+    <li><button type="button" class="ui-control plain icon fa-solid fa-play" data-action="start-combat"></button></li>
+    <li><button type="button" class="ui-control plain icon fa-solid fa-stop" data-action="end-combat"></button></li>
+    <li><button type="button" class="ui-control plain icon fa-solid fa-forward" data-action="advance"></button></li>
   </menu>
 `;
 
