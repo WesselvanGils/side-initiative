@@ -13,7 +13,7 @@
     "SIDE-INITIATIVE.Settings.InitiativeMethod.SideD20": "Side d20",
     "SIDE-INITIATIVE.Settings.InitiativeMethod.WeightedAverage": "Weighted combatant average",
     "SIDE-INITIATIVE.Settings.LegendaryActionWindows.Name": "Use Legendary Action Windows",
-    "SIDE-INITIATIVE.Settings.LegendaryActionWindows.Hint": "In side initiative every creature on a side acts at once, so Chris' Premades' usual end-of-turn legendary-action prompt never fires. With this on, whenever a creature on the active side finishes an Action (accounting for Extra Attack), the GM is asked whether any opposing legendary monster wants to spend a legendary action. Spending a legendary action this way does not consume the monster's reaction. Requires Chris' Premades and MidiQOL.",
+    "SIDE-INITIATIVE.Settings.LegendaryActionWindows.Hint": "In side initiative every creature on a side acts at once, so CPRs usual end-of-turn legendary-action prompt never fires. With this on, whenever a creature on the active side finishes an Action (accounting for Extra Attack), the popup will trigger.",
     "SIDE-INITIATIVE.LegendaryActionWindows.Prompt.Title": "Legendary Actions",
     "SIDE-INITIATIVE.LegendaryActionWindows.Prompt.Content": "Use a legendary action?",
     "SIDE-INITIATIVE.LegendaryActionWindows.Target.Title": "Choose a Target",
