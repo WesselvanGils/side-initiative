@@ -332,9 +332,17 @@ function collectTriggersForToken(tokenDocument: TokenLike | null | undefined, to
 
 async function invokeTriggers(triggers: SortedTrigger[], ownerCombatantId: string | null = null, ownerPlaceableId: string | null = null): Promise<void> {
     for (const trigger of triggers) {
-        const triggerToken = trigger.token as { id?: string; uuid?: string; document?: { uuid?: string } } | null;
+        const triggerToken = trigger.token as { id?: string; uuid?: string; document?: { uuid?: string }; setTarget?(state: boolean, options?: { releaseOthers?: boolean }): unknown } | null;
         const targetId = triggerToken?.id ?? triggerToken?.document?.uuid ?? triggerToken?.uuid ?? null;
-        debug(`    -> macro=${trigger.macroName} owner=${ownerCombatantId} ownerPlaceable=${ownerPlaceableId} trigger.token.id=${targetId}`);
+        const userTargetIds = Array.from((game as { user?: { targets?: Set<{ id?: string }> } } | null)?.user?.targets ?? []).map((token) => token.id);
+        debug(`    -> macro=${trigger.macroName} owner=${ownerCombatantId} target=${targetId} game.user.targets(before)=${JSON.stringify(userTargetIds)}`);
+        // HoH's damage activities target with `prompt: true`, so midi-qol resolves
+        // targets from the live selection (`game.user.targets`) instead of the
+        // `targetUuids` that `syntheticActivityRoll` passes. After a commander
+        // switch that selection can still hold the former commander, which
+        // redirects the damage onto them. Force-target this token first so the
+        // workflow hits the intended token.
+        triggerToken?.setTarget?.(true, { releaseOthers: true });
         try {
             await trigger.macro({ trigger });
         } catch (error) {
