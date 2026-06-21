@@ -80,19 +80,19 @@ export interface DockStateOptions {
 }
 
 /**
- * Resolve the best portrait image for a combatant (token image preferred over
- * the actor image, matching how the stock combat tracker renders rows).
+ * Resolve the best portrait image for a combatant. The actor's avatar image is
+ * preferred (full character art) and the token image is only a fallback.
  */
 export function resolveCombatantImg(combatant: CombatantLike | null | undefined): string | null {
     const c = combatant as (CombatantLike & CombatantWithImg) | null | undefined;
     const candidates = [
+        c?.actor?.img,
+        c?.document?.actor?.img,
         c?.img,
         c?.token?.texture?.src,
         c?.token?.img,
         c?.document?.img,
-        c?.actor?.img,
-        c?.actor?.prototypeToken?.texture?.src,
-        c?.document?.actor?.img
+        c?.actor?.prototypeToken?.texture?.src
     ];
     for (const candidate of candidates) {
         if (typeof candidate === "string" && candidate.trim()) return candidate;
@@ -316,6 +316,12 @@ export class CombatDockManager {
         const divider = el.querySelector(".side-dock-divider");
         divider?.classList.toggle("is-active", state.dividerActive);
 
+        // The divider ornament has a pointer; flip it to face the active side.
+        const ornament = el.querySelector(".side-dock-divider-ornament");
+        if (ornament) {
+            ornament.classList.toggle("points-right", normalizeSideId(state.activeSideId ?? "") === DOCK_RIGHT_SIDE_ID);
+        }
+
         const roundEl = el.querySelector(".side-dock-round");
         if (roundEl) roundEl.textContent = state.round != null ? String(state.round) : "";
 
@@ -329,8 +335,7 @@ export class CombatDockManager {
         const previous = this.lastActiveSideId;
         const next = state.activeSideId;
         if (previous != null && next != null && normalizeSideId(previous) !== normalizeSideId(next)) {
-            const target = this.flowTarget(el, next);
-            if (target) this.playFlowAnimation(target);
+            this.triggerFlow(el, next);
         }
         if (next) this.lastActiveSideId = normalizeSideId(next);
 
@@ -364,25 +369,41 @@ export class CombatDockManager {
         if (meta) meta.textContent = String(side.count);
     }
 
-    private flowTarget(el: HTMLElement, activeSideId: string): HTMLElement | null {
-        if (normalizeSideId(activeSideId) === DOCK_LEFT_SIDE_ID) return el.querySelector('[data-side="players"]');
-        if (normalizeSideId(activeSideId) === DOCK_RIGHT_SIDE_ID) return el.querySelector('[data-side="monsters"]');
-        return el.querySelector(".side-dock-divider");
+    private triggerFlow(el: HTMLElement, activeSideId: string): void {
+        const normalized = normalizeSideId(activeSideId);
+        if (normalized === DOCK_LEFT_SIDE_ID) {
+            const target = el.querySelector('[data-side="players"]');
+            if (target) this.playFlowAnimation(target, "panel");
+        } else if (normalized === DOCK_RIGHT_SIDE_ID) {
+            const target = el.querySelector('[data-side="monsters"]');
+            if (target) this.playFlowAnimation(target, "panel");
+        } else {
+            const target = el.querySelector(".side-dock-divider");
+            if (target) this.playFlowAnimation(target, "divider");
+        }
     }
 
-    private playFlowAnimation(target: Element): void {
-        const animatable = target as Element & { animate?: (keyframes: never[], options: Record<string, unknown>) => { onfinish?: (() => void) | null } };
+    /**
+     * Play the one-shot "flow" highlight. Side panels (roughly card-shaped) get a
+     * gold box-shadow sweep; the thin vertical divider gets an in-place brightness
+     * pulse instead, so the flash matches its shape instead of reading as a square.
+     */
+    private playFlowAnimation(target: Element, kind: "panel" | "divider"): void {
+        const animatable = target as Element & { animate?: (keyframes: never[], options: Record<string, unknown>) => unknown };
         if (typeof animatable.animate !== "function") return;
+        const keyframes = kind === "divider"
+            ? [
+                { filter: "brightness(1)" },
+                { filter: "brightness(2.4)", offset: 0.4 },
+                { filter: "brightness(1)" }
+            ]
+            : [
+                { boxShadow: "0 0 0 0 rgba(255, 215, 0, 0)", filter: "brightness(1)" },
+                { boxShadow: "0 0 28px 8px rgba(255, 215, 0, 0.9)", filter: "brightness(1.3)", offset: 0.4 },
+                { boxShadow: "0 0 0 0 rgba(255, 215, 0, 0)", filter: "brightness(1)" }
+            ];
         try {
-            const animation = animatable.animate(
-                [
-                    { boxShadow: "0 0 0 0 rgba(255, 215, 0, 0)", filter: "brightness(1)" },
-                    { boxShadow: "0 0 28px 8px rgba(255, 215, 0, 0.9)", filter: "brightness(1.3)", offset: 0.4 },
-                    { boxShadow: "0 0 0 0 rgba(255, 215, 0, 0)", filter: "brightness(1)" }
-                ] as never[],
-                { duration: 720, easing: "ease-out" }
-            );
-            if (animation && typeof animation === "object") animation.onfinish = null;
+            animatable.animate(keyframes as never[], { duration: 720, easing: "ease-out" });
         } catch {
             // Animations are non-essential; ignore environments without WAAPI.
         }
@@ -471,29 +492,29 @@ const DOCK_TEMPLATE = `
       <div class="side-dock-side" data-side="players">
         <div class="side-dock-portrait">
           <img class="side-dock-portrait-img" alt="" />
+          <div class="side-dock-meta"></div>
+          <div class="side-dock-label"></div>
         </div>
-        <div class="side-dock-label"></div>
-        <div class="side-dock-meta" title="Combatants on this side"></div>
       </div>
-      <div class="side-dock-divider" data-tooltip="Round">
+      <div class="side-dock-divider">
         <div class="side-dock-divider-ornament"></div>
         <div class="side-dock-round"></div>
       </div>
       <div class="side-dock-side" data-side="monsters">
         <div class="side-dock-portrait">
           <img class="side-dock-portrait-img" alt="" />
+          <div class="side-dock-meta"></div>
+          <div class="side-dock-label"></div>
         </div>
-        <div class="side-dock-label"></div>
-        <div class="side-dock-meta" title="Combatants on this side"></div>
       </div>
     </div>
-    <div class="side-dock-controls">
-      <button type="button" class="side-dock-control" data-action="start-combat"><i class="fas fa-play"></i></button>
-      <button type="button" class="side-dock-control" data-action="end-combat"><i class="fas fa-stop"></i></button>
-      <button type="button" class="side-dock-control" data-action="roll-init"><i class="fas fa-dice-d20"></i></button>
-      <button type="button" class="side-dock-control" data-action="advance"><i class="fas fa-forward"></i></button>
-      <button type="button" class="side-dock-control" data-action="reset"><i class="fas fa-rotate-left"></i></button>
-    </div>
+  </div>
+  <div class="side-dock-controls">
+    <button type="button" class="side-dock-control" data-action="start-combat"><i class="fas fa-play"></i></button>
+    <button type="button" class="side-dock-control" data-action="end-combat"><i class="fas fa-stop"></i></button>
+    <button type="button" class="side-dock-control" data-action="roll-init"><i class="fas fa-dice-d20"></i></button>
+    <button type="button" class="side-dock-control" data-action="advance"><i class="fas fa-forward"></i></button>
+    <button type="button" class="side-dock-control" data-action="reset"><i class="fas fa-rotate-left"></i></button>
   </div>
 `;
 

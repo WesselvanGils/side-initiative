@@ -212,9 +212,9 @@ test("getDockState reports the round and started flag from the combat", () => {
     assert.equal(state.started, false);
 });
 
-test("resolveCombatantImg prefers the token image then the actor image", () => {
-    assert.equal(resolveCombatantImg(makeCombatant({ id: "a", sideId: "players", img: "token.png", actorImg: "actor.png" })), "token.png");
-    assert.equal(resolveCombatantImg(makeCombatant({ id: "a", sideId: "players", img: null, actorImg: "actor.png" })), "actor.png");
+test("resolveCombatantImg prefers the actor (avatar) image then the token image", () => {
+    assert.equal(resolveCombatantImg(makeCombatant({ id: "a", sideId: "players", img: "token.png", actorImg: "actor.png" })), "actor.png");
+    assert.equal(resolveCombatantImg(makeCombatant({ id: "a", sideId: "players", img: "token.png", actorImg: null })), "token.png");
     assert.equal(resolveCombatantImg(makeCombatant({ id: "a", sideId: "players", img: null, actorImg: null })), null);
     assert.equal(resolveCombatantImg(null), null);
 });

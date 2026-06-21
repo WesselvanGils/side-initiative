@@ -120,6 +120,9 @@
     left: 50%;
     transform: translateX(-50%);
     z-index: 100;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
     pointer-events: none;
 }
 
@@ -134,50 +137,47 @@
 /* Dock size presets. --side-dock-size is the portrait card width; the frame
    border, radii and font all scale from it so the dock stays proportional. */
 .side-initiative-combat-dock.side-dock-size-tiny {
-    --side-dock-size: 96px;
-    --side-dock-border-width: 12px;
+    --side-dock-size: 110px;
+    --side-dock-border-width: 11px;
     --side-dock-radius: 8px;
-    --side-dock-font: 0.78rem;
+    --side-dock-font: 0.72rem;
 }
 .side-initiative-combat-dock.side-dock-size-small {
-    --side-dock-size: 140px;
-    --side-dock-border-width: 15px;
+    --side-dock-size: 160px;
+    --side-dock-border-width: 14px;
     --side-dock-radius: 10px;
-    --side-dock-font: 0.88rem;
+    --side-dock-font: 0.82rem;
 }
 .side-initiative-combat-dock.side-dock-size-medium {
-    --side-dock-size: 192px;
-    --side-dock-border-width: 20px;
+    --side-dock-size: 220px;
+    --side-dock-border-width: 18px;
     --side-dock-radius: 12px;
-    --side-dock-font: 1rem;
+    --side-dock-font: 0.95rem;
 }
 .side-initiative-combat-dock.side-dock-size-large {
-    --side-dock-size: 256px;
-    --side-dock-border-width: 24px;
+    --side-dock-size: 290px;
+    --side-dock-border-width: 22px;
     --side-dock-radius: 14px;
-    --side-dock-font: 1.12rem;
+    --side-dock-font: 1.05rem;
 }
 .side-initiative-combat-dock.side-dock-size-xlarge {
-    --side-dock-size: 320px;
-    --side-dock-border-width: 30px;
+    --side-dock-size: 360px;
+    --side-dock-border-width: 28px;
     --side-dock-radius: 16px;
-    --side-dock-font: 1.3rem;
+    --side-dock-font: 1.2rem;
 }
 
+/* The frame hugs its content tightly so almost everything visible is art or
+   border; the dark panel only peeks through the thin divider gap. */
 .side-dock-frame {
     position: relative;
     pointer-events: all;
     display: flex;
     flex-direction: column;
-    gap: calc(var(--side-dock-size) * 0.05);
-    padding: calc(var(--side-dock-border-width) * 0.8);
+    padding: calc(var(--side-dock-size) * 0.02);
     border-radius: var(--side-dock-radius);
-    background:
-        radial-gradient(120% 100% at 50% 0%, rgba(80, 60, 30, 0.35), transparent 60%),
-        linear-gradient(180deg, #2b2118 0%, #1a140d 70%, #120d08 100%);
-    box-shadow:
-        0 10px 30px rgba(0, 0, 0, 0.6),
-        inset 0 0 40px rgba(0, 0, 0, 0.5);
+    background: linear-gradient(180deg, #1a140d, #0c0906);
+    box-shadow: 0 10px 26px rgba(0, 0, 0, 0.65);
 }
 
 /* The CC0 border ring, drawn on a pseudo so its gold tint (filter) does not
@@ -203,29 +203,24 @@
     display: flex;
     align-items: stretch;
     justify-content: center;
-    gap: calc(var(--side-dock-size) * 0.08);
+    gap: calc(var(--side-dock-size) * 0.02);
 }
 
 .side-dock-side {
     position: relative;
     isolation: isolate;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: calc(var(--side-dock-size) * 0.04);
-    padding: calc(var(--side-dock-size) * 0.04);
-    border-radius: calc(var(--side-dock-radius) * 0.8);
+    border-radius: calc(var(--side-dock-radius) * 0.6);
     transition: box-shadow 0.3s ease, transform 0.3s ease;
     --side-dock-color: #caa64a;
 }
 
+/* Wide, short banner portraits: the dock ends up much wider than it is tall. */
 .side-dock-portrait {
+    position: relative;
     width: var(--side-dock-size);
-    height: calc(var(--side-dock-size) * 1.12);
+    height: calc(var(--side-dock-size) * 0.6);
     overflow: hidden;
-    border-radius: calc(var(--side-dock-radius) * 0.7);
-    border: 2px solid rgba(0, 0, 0, 0.6);
-    box-shadow: inset 0 0 0 1px rgba(255, 215, 0, 0.18), 0 4px 10px rgba(0, 0, 0, 0.5);
+    border-radius: calc(var(--side-dock-radius) * 0.55);
     background: #0c0906;
 }
 
@@ -246,25 +241,46 @@
     transform: scaleX(-1);
 }
 
+/* Commander name overlaid on the art (bottom scrim) so no extra background row. */
 .side-dock-label {
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    padding: calc(var(--side-dock-size) * 0.02) calc(var(--side-dock-size) * 0.05);
+    box-sizing: border-box;
     font-size: var(--side-dock-font);
     font-weight: 700;
     text-align: center;
     color: #f3e7c8;
-    text-shadow: 0 1px 3px rgba(0, 0, 0, 0.9);
-    max-width: var(--side-dock-size);
+    text-shadow: 0 1px 4px rgba(0, 0, 0, 0.95);
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+    background: linear-gradient(0deg, rgba(0, 0, 0, 0.85), rgba(0, 0, 0, 0.35) 60%, transparent);
 }
 
+/* Combatant count as a small badge in the top-right corner of the portrait. */
 .side-dock-meta {
+    position: absolute;
+    top: calc(var(--side-dock-size) * 0.03);
+    right: calc(var(--side-dock-size) * 0.04);
+    min-width: calc(var(--side-dock-font) * 1.5);
+    height: calc(var(--side-dock-font) * 1.5);
+    padding: 0 calc(var(--side-dock-font) * 0.35);
+    box-sizing: border-box;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 999px;
+    background: rgba(0, 0, 0, 0.6);
+    border: 1px solid rgba(255, 215, 0, 0.3);
+    color: #f3e7c8;
     font-size: calc(var(--side-dock-font) * 0.72);
-    color: rgba(243, 231, 200, 0.6);
 }
 
 .side-dock-side.is-empty .side-dock-portrait {
-    filter: grayscale(1) brightness(0.45);
+    filter: grayscale(1) brightness(0.4);
 }
 
 /* Steady active-side highlight: a glowing, breathing halo in the side's color. */
@@ -303,15 +319,16 @@
     50% { opacity: 0.95; }
 }
 
-/* Center divider between the two sides. */
+/* Center divider between the two sides. Sized to the round badge so nothing
+   overlaps the portraits. */
 .side-dock-divider {
     position: relative;
     display: flex;
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    gap: calc(var(--side-dock-size) * 0.05);
-    width: calc(var(--side-dock-size) * 0.22);
+    gap: calc(var(--side-dock-size) * 0.04);
+    width: calc(var(--side-dock-size) * 0.3);
     align-self: stretch;
 }
 
@@ -336,19 +353,26 @@
 
 .side-dock-divider-ornament {
     position: relative;
-    width: calc(var(--side-dock-size) * 0.2);
-    height: calc(var(--side-dock-size) * 0.06);
+    width: calc(var(--side-dock-size) * 0.14);
+    height: calc(var(--side-dock-size) * 0.05);
     background: url("/modules/side-initiative/assets/dock/divider.png") center / contain no-repeat;
     filter: sepia(1) saturate(4.5) hue-rotate(-12deg) brightness(1.05);
-    opacity: 0.5;
-    transition: opacity 0.35s ease, filter 0.35s ease;
+    opacity: 0.55;
+    transform: scaleX(1);
+    transition: opacity 0.35s ease, filter 0.35s ease, transform 0.4s ease;
+}
+
+/* The ornament's pointer faces the active side; flip it when the turn passes. */
+.side-dock-divider-ornament.points-right {
+    transform: scaleX(-1);
 }
 
 .side-dock-round {
     position: relative;
-    min-width: calc(var(--side-dock-size) * 0.28);
-    height: calc(var(--side-dock-size) * 0.28);
-    padding: 0 calc(var(--side-dock-size) * 0.04);
+    min-width: calc(var(--side-dock-size) * 0.26);
+    height: calc(var(--side-dock-size) * 0.26);
+    padding: 0 calc(var(--side-dock-size) * 0.03);
+    box-sizing: border-box;
     display: flex;
     align-items: center;
     justify-content: center;
@@ -384,36 +408,42 @@
     box-shadow: 0 0 16px rgba(255, 215, 0, 0.85);
 }
 
-/* Control buttons. */
+/* Controls float below the frame, outside the border. */
 .side-dock-controls {
     display: flex;
     justify-content: center;
-    gap: calc(var(--side-dock-size) * 0.04);
+    gap: calc(var(--side-dock-size) * 0.02);
+    margin-top: calc(var(--side-dock-size) * 0.03);
+    pointer-events: all;
 }
 
+/* Native Foundry-style buttons (subtle dark fill, accent hover). */
 .side-dock-control {
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    min-width: calc(var(--side-dock-font) * 2.4);
-    height: calc(var(--side-dock-font) * 2.4);
-    padding: 0 calc(var(--side-dock-size) * 0.05);
-    border-radius: calc(var(--side-dock-radius) * 0.6);
-    border: 1px solid rgba(255, 215, 0, 0.35);
-    background: linear-gradient(180deg, rgba(70, 52, 26, 0.9), rgba(30, 22, 12, 0.95));
-    color: #f3e7c8;
+    gap: 0.35em;
+    height: calc(var(--side-dock-font) * 2.2);
+    min-width: calc(var(--side-dock-font) * 2.2);
+    padding: 0 calc(var(--side-dock-font) * 0.55);
     font-size: var(--side-dock-font);
+    line-height: 1;
+    color: var(--color-text-light-primary, #e8e8e8);
+    background: rgba(255, 255, 255, 0.06);
+    border: 1px solid var(--color-border-dark, #444);
+    border-radius: 3px;
     cursor: pointer;
-    transition: background 0.2s ease, box-shadow 0.2s ease, transform 0.1s ease;
+    transition: border-color 0.15s ease, background 0.15s ease, box-shadow 0.15s ease;
 }
 
 .side-dock-control:hover {
-    background: linear-gradient(180deg, rgba(110, 82, 40, 0.95), rgba(50, 36, 18, 0.98));
-    box-shadow: 0 0 12px rgba(255, 215, 0, 0.5);
+    background: rgba(255, 255, 255, 0.12);
+    border-color: var(--color-border-highlight, #c9a35a);
+    box-shadow: 0 0 6px rgba(0, 0, 0, 0.5);
 }
 
 .side-dock-control:active {
-    transform: translateY(1px);
+    background: rgba(0, 0, 0, 0.25);
 }
 
 .side-dock-control:disabled {

@@ -53,14 +53,18 @@ Legendary actions are also recovered at the **start** of a side's turn for every
 
 Enable **Use combat dock** in the module settings to replace the per-combatant combat tracker with a compact, top-of-screen dock. It shows the **players'** commander on the left and the **monsters'** commander on the right, facing each other inside a fantasy frame, with the current round between them.
 
-- The portrait for each side is the side's **commander** (the crowned representative). Change a side's commander and the dock artwork updates automatically.
+- The portrait for each side is the side's **commander** (the crowned representative), shown using the actor's **avatar art**. Change a side's commander and the dock artwork updates automatically.
 - The **active side** gets a glowing highlight, with a flow sweep when the turn passes from one side to the other.
 - When the active side is neither players nor monsters (for example an *allies* or *neutral* side), the **center divider** is highlighted instead.
 - Controls let the GM (or anyone with combat-tracker permission) **start/end combat**, **roll side initiative**, **advance** to the next side, and **reset initiative**. Players who control the active side's commander can also advance.
 - While the dock is visible, other UIs docked to the top of the screen (for example the DnD5e calendar) are hidden to avoid clutter; the scene navigation and player list are kept. This can be turned off with **Hide conflicting top UI**.
 - **Combat dock size** scales the dock from *tiny* to *extra large*.
 
-The frame and divider artwork is from Kenney's *Fantasy UI Borders* pack, which is **CC0** (public domain, no attribution required, human-created). See `assets/dock/License.txt`. To use your own frame, overwrite `assets/dock/frame.png` (a 9-slice border tile works best) and `assets/dock/divider.png`.
+The frame and divider artwork is from Kenney's *Fantasy UI Borders* pack, which is **CC0** (public domain, no attribution required, human-created). To use your own frame, overwrite `assets/dock/frame.png` (a 9-slice border tile works best) and `assets/dock/divider.png`.
+
+## Credits
+
+- **Combat dock frame and divider art** — *Fantasy UI Borders* by **Kenney** ([kenney.nl](https://kenney.nl/assets/fantasy-ui-borders)), licensed **CC0 1.0** (public domain). Although CC0 does not require attribution, Kenney's work is gratefully acknowledged here and in `assets/dock/License.txt`.
 
 ## Development
 
