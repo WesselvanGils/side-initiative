@@ -178,7 +178,6 @@
     padding: calc(var(--side-dock-border-width) * 1.15);
     border-radius: var(--side-dock-radius);
     background: linear-gradient(180deg, #1a140d, #0c0906);
-    box-shadow: 0 10px 26px rgba(0, 0, 0, 0.65);
 }
 
 /* The CC0 border ring, drawn on a pseudo so its gold tint (filter) does not
