@@ -229,7 +229,6 @@ export function renderCombatTracker(app: TrackerApp, html: unknown): void {
 
         panel.querySelector('[data-action="roll-side-init"]')?.addEventListener("click", async () => {
             await getSideInitiative()?.rollSideInitiative?.(combat);
-            ui?.notifications?.info?.(game?.i18n?.localize?.("SIDE-INITIATIVE.Notifications.SideRolled") ?? "SIDE-INITIATIVE.Notifications.SideRolled");
             app.render?.();
         });
 

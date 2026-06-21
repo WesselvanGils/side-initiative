@@ -502,7 +502,6 @@ export class CombatDockManager {
                     break;
                 case "roll-init":
                     await getSideInitiative()?.rollSideInitiative?.(combat);
-                    ui?.notifications?.info?.(localize("SIDE-INITIATIVE.Notifications.SideRolled", "Side initiative rolled."));
                     break;
                 case "start-combat":
                     await combat.startCombat?.();
