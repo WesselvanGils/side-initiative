@@ -188,6 +188,22 @@ const CONTROL_LABELS: Record<string, string> = {
 };
 
 /**
+ * Concrete dimensions for each size preset. These are applied as INLINE styles
+ * (see {@link CombatDockManager.applySize}) rather than via a CSS class so the
+ * dock has real dimensions the instant it is created — independent of when the
+ * stylesheet loads (Foundry caches module CSS) and of shrink-to-fit falling back
+ * to the portrait image's intrinsic size on the first paint. Values mirror the
+ * `.side-dock-size-*` rules in module.css; keep them in sync.
+ */
+const COMBAT_DOCK_SIZE_PRESETS: Record<string, { size: string; borderWidth: string; radius: string; font: string }> = {
+    [COMBAT_DOCK_SIZE_OPTIONS.tiny]: { size: "110px", borderWidth: "10px", radius: "8px", font: "0.72rem" },
+    [COMBAT_DOCK_SIZE_OPTIONS.small]: { size: "132px", borderWidth: "11px", radius: "9px", font: "0.78rem" },
+    [COMBAT_DOCK_SIZE_OPTIONS.medium]: { size: "156px", borderWidth: "12px", radius: "10px", font: "0.85rem" },
+    [COMBAT_DOCK_SIZE_OPTIONS.large]: { size: "184px", borderWidth: "13px", radius: "11px", font: "0.92rem" },
+    [COMBAT_DOCK_SIZE_OPTIONS.xlarge]: { size: "216px", borderWidth: "15px", radius: "12px", font: "1rem" }
+};
+
+/**
  * Manages the docked combat-tracker DOM element: builds it once, mounts it into
  * `#ui-top`, and re-applies the current {@link DockState} on combat changes.
  */
@@ -210,6 +226,23 @@ export class CombatDockManager {
         const value = getSetting(MODULE_ID, SETTINGS.combatDockSize) as string | undefined;
         const sizes = Object.values(COMBAT_DOCK_SIZE_OPTIONS);
         return value && sizes.includes(value as never) ? value : COMBAT_DOCK_SIZE_OPTIONS.medium;
+    }
+
+    /**
+     * Apply the size preset as INLINE custom properties. Inline styles are set at
+     * element-creation time and win over the stylesheet, so the dock always has
+     * concrete dimensions on the first paint — even if module.css is still cached
+     * or the size class has not been processed yet. Without this the portrait
+     * cards fall back to the image's intrinsic size until a reflow.
+     */
+    applySize(): void {
+        const el = this.element;
+        if (!el) return;
+        const preset = COMBAT_DOCK_SIZE_PRESETS[this.getSize()] ?? COMBAT_DOCK_SIZE_PRESETS[COMBAT_DOCK_SIZE_OPTIONS.medium];
+        el.style.setProperty("--side-dock-size", preset.size);
+        el.style.setProperty("--side-dock-border-width", preset.borderWidth);
+        el.style.setProperty("--side-dock-radius", preset.radius);
+        el.style.setProperty("--side-dock-font", preset.font);
     }
 
     /** Register the Foundry hooks that keep the dock in sync. Idempotent. */
@@ -279,6 +312,7 @@ export class CombatDockManager {
 
         this.element = element;
         this.attachControlListeners();
+        this.applySize();
 
         const uiTop = document.getElementById("ui-top");
         if (uiTop) uiTop.prepend(element);
@@ -309,6 +343,7 @@ export class CombatDockManager {
             el.classList.remove(`side-dock-size-${candidate}`);
         }
         el.classList.add(`side-dock-size-${size}`);
+        this.applySize();
 
         const leftEl = el.querySelector('[data-side="players"]');
         const rightEl = el.querySelector('[data-side="monsters"]');
