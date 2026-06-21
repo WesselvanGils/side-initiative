@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { getDockState, resolveCombatantImg } from "../src/ui/combat-dock.js";
+import { getDockState, resolveCombatantImg, resolvePrimaryPartyArt } from "../src/ui/combat-dock.js";
 
 interface CombatantOptions {
     id: string;
@@ -218,4 +218,90 @@ test("resolveCombatantImg prefers the actor (avatar) image then the token image"
     assert.equal(resolveCombatantImg(makeCombatant({ id: "a", sideId: "players", img: "token.png", actorImg: null })), "token.png");
     assert.equal(resolveCombatantImg(makeCombatant({ id: "a", sideId: "players", img: null, actorImg: null })), null);
     assert.equal(resolveCombatantImg(null), null);
+});
+
+test("getDockState uses the primary party art for the players panel when enabled", () => {
+    const combat = makeCombat(
+        [
+            makeCombatant({ id: "pc-1", sideId: "players", img: "commander.png" }),
+            makeCombatant({ id: "npc-1", sideId: "monsters", img: "monster.png" })
+        ],
+        { activeSideId: "players" }
+    );
+
+    const state = getDockState(combat, {
+        usePrimaryPartyArt: true,
+        primaryParty: { img: "party.png", name: "The Brave" }
+    });
+
+    assert.equal(state.left?.img, "party.png");
+    assert.equal(state.left?.label, "The Brave");
+    // The monsters panel is unaffected.
+    assert.equal(state.right?.img, "monster.png");
+});
+
+test("getDockState falls back to the commander when primary party art is unavailable", () => {
+    const combat = makeCombat(
+        [makeCombatant({ id: "pc-1", sideId: "players", img: "commander.png" })],
+        { activeSideId: "players" }
+    );
+
+    const withParty = getDockState(combat, { usePrimaryPartyArt: true, primaryParty: null });
+    assert.equal(withParty.left?.img, "commander.png");
+
+    const noArt = getDockState(combat, { usePrimaryPartyArt: true, primaryParty: { img: null, name: "The Brave" } });
+    assert.equal(noArt.left?.img, "commander.png");
+});
+
+test("getDockState ignores the primary party when the setting is off", () => {
+    const combat = makeCombat(
+        [makeCombatant({ id: "pc-1", sideId: "players", img: "commander.png" })],
+        { activeSideId: "players" }
+    );
+
+    const state = getDockState(combat, {
+        usePrimaryPartyArt: false,
+        primaryParty: { img: "party.png", name: "The Brave" }
+    });
+
+    assert.equal(state.left?.img, "commander.png");
+});
+
+test("resolvePrimaryPartyArt reads the dnd5e primary party setting and falls back gracefully", () => {
+    const original = globalThis.game;
+
+    // dnd5e active, primary party resolves to a group actor with art.
+    globalThis.game = {
+        system: { id: "dnd5e" },
+        settings: { get(scope, key) {
+            if (scope === "dnd5e" && key === "primaryParty") return { actor: { img: "party.png", name: "The Brave" } };
+            return null;
+        } }
+    } as never;
+    assert.deepEqual(resolvePrimaryPartyArt(), { img: "party.png", name: "The Brave" });
+
+    // `.actor` may be a lazy getter function returning the actor.
+    globalThis.game = {
+        system: { id: "dnd5e" },
+        settings: { get() { return { actor: () => ({ img: "lazy.png", name: "Lazy" }) }; } }
+    } as never;
+    assert.deepEqual(resolvePrimaryPartyArt(), { img: "lazy.png", name: "Lazy" });
+
+    // No party set.
+    globalThis.game = {
+        system: { id: "dnd5e" },
+        settings: { get() { return null; } }
+    } as never;
+    assert.equal(resolvePrimaryPartyArt(), null);
+
+    // Non-dnd5e system: never touches the setting.
+    let touched = false;
+    globalThis.game = {
+        system: { id: "pf2e" },
+        settings: { get() { touched = true; return null; } }
+    } as never;
+    assert.equal(resolvePrimaryPartyArt(), null);
+    assert.equal(touched, false);
+
+    globalThis.game = original;
 });

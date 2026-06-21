@@ -73,9 +73,19 @@ export interface DockState {
     dividerActive: boolean;
 }
 
+/** Art + name for the dnd5e "Primary Party", used for the players panel. */
+export interface PartyArt {
+    img: string | null;
+    name: string | null;
+}
+
 export interface DockStateOptions {
     enabled?: boolean;
     groupByDisposition?: boolean;
+    /** When true, the players (left) panel shows the dnd5e primary party art. */
+    usePrimaryPartyArt?: boolean;
+    /** Resolved primary party art, or null when none is available. */
+    primaryParty?: PartyArt | null;
 }
 
 /**
@@ -136,6 +146,7 @@ function buildSidePanel(
 export function getDockState(combat: CombatLike | null | undefined, options: DockStateOptions = {}): DockState {
     const enabled = options.enabled ?? true;
     const groupByDisposition = options.groupByDisposition ?? true;
+    const usePrimaryPartyArt = options.usePrimaryPartyArt ?? false;
     const activeSideId = getActiveSideId(combat, { groupByDisposition });
 
     // The dock appears as soon as a combat exists in the current scene — even
@@ -147,6 +158,13 @@ export function getDockState(combat: CombatLike | null | undefined, options: Doc
 
     const left = buildSidePanel(combat, DOCK_LEFT_SIDE_ID, activeSideId, { groupByDisposition });
     const right = buildSidePanel(combat, DOCK_RIGHT_SIDE_ID, activeSideId, { groupByDisposition });
+
+    // The players panel can show the dnd5e primary party art instead of the
+    // commander's; fall back to the commander when no party (or no art) exists.
+    if (usePrimaryPartyArt && options.primaryParty?.img && left) {
+        left.img = options.primaryParty.img;
+        if (options.primaryParty.name) left.label = options.primaryParty.name;
+    }
 
     const normalizedActive = activeSideId ? normalizeSideId(activeSideId) : null;
     const dividerActive = Boolean(normalizedActive)
@@ -172,6 +190,36 @@ function canManageCombat(): boolean {
 
 function getViewedCombat(): CombatLike | null {
     return (game?.combat as CombatLike | null) ?? null;
+}
+
+/**
+ * Resolve the dnd5e "Primary Party" art. dnd5e stores the designated party in a
+ * world setting (`dnd5e.primaryParty`, a `PrimaryPartySetting` DataModel) whose
+ * `.actor` is a lazy foreign-document reference that resolves to the group Actor.
+ * Returns that actor's art + name, or null when there is no party, no art, or
+ * dnd5e is not the active system. Always defensive — never throws.
+ */
+export function resolvePrimaryPartyArt(): PartyArt | null {
+    if (game?.system?.id !== "dnd5e") return null;
+    let setting: unknown;
+    try {
+        setting = (game as { settings?: { get?: (scope: string, key: string) => unknown } | null })?.settings?.get?.("dnd5e", "primaryParty");
+    } catch {
+        return null;
+    }
+    let actor: { img?: unknown; name?: unknown } | null | undefined;
+    try {
+        const ref = (setting as { actor?: unknown } | null)?.actor;
+        actor = typeof ref === "function"
+            ? (ref as () => { img?: unknown; name?: unknown } | null)()
+            : (ref as { img?: unknown; name?: unknown } | null | undefined);
+    } catch {
+        return null;
+    }
+    const img = actor?.img;
+    if (typeof img !== "string" || !img.trim()) return null;
+    const name = actor?.name;
+    return { img, name: typeof name === "string" && name.trim() ? name : null };
 }
 
 function localize(key: string, fallback: string): string {
@@ -222,6 +270,10 @@ export class CombatDockManager {
         return Boolean(getSetting(MODULE_ID, SETTINGS.hideConflictingTopUI));
     }
 
+    isPrimaryPartyArtEnabled(): boolean {
+        return Boolean(getSetting(MODULE_ID, SETTINGS.usePrimaryPartyArt));
+    }
+
     getSize(): string {
         const value = getSetting(MODULE_ID, SETTINGS.combatDockSize) as string | undefined;
         const sizes = Object.values(COMBAT_DOCK_SIZE_OPTIONS);
@@ -260,6 +312,8 @@ export class CombatDockManager {
         this.track(h.on("updateCombat", refresh));
         this.track(h.on("updateCombatant", refresh));
         this.track(h.on("deleteCombatant", refresh));
+        // Party art/name lives on an Actor, so refresh when actors change too.
+        this.track(h.on("updateActor", refresh));
         this.track(h.on(SIDETURN_START_HOOK, refresh));
         // When the viewed scene changes the active combat may change too.
         this.track(h.on("canvasReady", refresh));
@@ -284,7 +338,12 @@ export class CombatDockManager {
     /** Re-evaluate visibility and re-apply state. */
     refresh(): void {
         const combat = getViewedCombat();
-        const state = getDockState(combat, { enabled: this.isEnabled() });
+        const usePrimaryPartyArt = this.isPrimaryPartyArtEnabled();
+        const state = getDockState(combat, {
+            enabled: this.isEnabled(),
+            usePrimaryPartyArt,
+            primaryParty: usePrimaryPartyArt ? resolvePrimaryPartyArt() : null
+        });
 
         if (!state.visible) {
             this.applyHideConflicting(false);

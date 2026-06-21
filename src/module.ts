@@ -112,6 +112,16 @@ function registerSettings(): void {
         default: true,
         onChange: () => getCombatDock().requestRefresh()
     });
+
+    settings?.register?.(MODULE_ID, SETTINGS.usePrimaryPartyArt, {
+        name: "SIDE-INITIATIVE.Settings.UsePrimaryPartyArt.Name",
+        hint: "SIDE-INITIATIVE.Settings.UsePrimaryPartyArt.Hint",
+        scope: "world",
+        config: true,
+        type: Boolean,
+        default: true,
+        onChange: () => getCombatDock().requestRefresh()
+    });
 }
 
 /**

@@ -9,6 +9,7 @@ export const LEGENDARY_ACTION_WINDOWS_SETTING = "useLegendaryActionWindows";
 export const COMBAT_DOCK_SETTING = "useCombatDock";
 export const COMBAT_DOCK_SIZE_SETTING = "combatDockSize";
 export const HIDE_CONFLICTING_TOP_UI_SETTING = "hideConflictingTopUI";
+export const USE_PRIMARY_PARTY_ART_SETTING = "usePrimaryPartyArt";
 export const SOCKET_EVENT = `module.${MODULE_ID}`;
 
 export const COMMANDER_CONTROL_OPTIONS = {
@@ -52,5 +53,6 @@ export const SETTINGS = {
     legendaryActionWindows: LEGENDARY_ACTION_WINDOWS_SETTING,
     useCombatDock: COMBAT_DOCK_SETTING,
     combatDockSize: COMBAT_DOCK_SIZE_SETTING,
-    hideConflictingTopUI: HIDE_CONFLICTING_TOP_UI_SETTING
+    hideConflictingTopUI: HIDE_CONFLICTING_TOP_UI_SETTING,
+    usePrimaryPartyArt: USE_PRIMARY_PARTY_ART_SETTING
 } as const;

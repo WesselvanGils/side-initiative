@@ -54,6 +54,7 @@ Legendary actions are also recovered at the **start** of a side's turn for every
 Enable **Use combat dock** in the module settings to replace the per-combatant combat tracker with a compact, top-of-screen dock. It shows the **players'** commander on the left and the **monsters'** commander on the right, facing each other inside a fantasy frame, with the current round between them.
 
 - The portrait for each side is the side's **commander** (the crowned representative), shown using the actor's **avatar art**. Change a side's commander and the dock artwork updates automatically.
+- With **Use primary party art** (on by default), the players' panel shows the dnd5e **Primary Party** group's art instead of the commander's, falling back to the commander when no primary party is set.
 - The **active side** gets a glowing highlight, with a flow sweep when the turn passes from one side to the other.
 - When the active side is neither players nor monsters (for example an *allies* or *neutral* side), the **center divider** is highlighted instead.
 - Controls let the GM (or anyone with combat-tracker permission) **start/end combat**, **roll side initiative**, **advance** to the next side, and **reset initiative**. Players who control the active side's commander can also advance.
