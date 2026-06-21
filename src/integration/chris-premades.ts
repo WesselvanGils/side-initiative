@@ -403,7 +403,15 @@ async function firePassesForSide(combat: CombatLike, sideId: string, passes: rea
     for (const combatant of getCombatantsForSide(combat, sideId, { includeDefeated: false })) {
         const { document: tokenDocument, placeable: tokenPlaceable } = resolveCombatantToken(combatant);
         const combatantId = combatant?.id ?? null;
+        const tokenId = (combatant as { tokenId?: string } | null)?.tokenId ?? "?";
+        const docId = tokenDocument?.id ?? "?";
         const placeableId = (tokenPlaceable as { id?: string } | null)?.id ?? null;
+        const placeableUuid = (tokenPlaceable as { document?: { uuid?: string } } | null)?.document?.uuid ?? "?";
+        // Trace token resolution: combatant.tokenId is what the combatant SHOULD
+        // point at; doc.id is what `combatant.token` resolved to; placeable.doc.uuid
+        // is what syntheticActivityRoll will actually target. A mismatch here
+        // (e.g. after a commander switch) reveals a stale token reference.
+        debug(`  combatant=${combatantId} tokenId=${tokenId} token.id=${docId} placeable.id=${placeableId} placeable.doc.uuid=${placeableUuid}`);
         if (!tokenPlaceable) {
             debug(`  combatant=${combatantId} SKIP (no token placeable)`);
             continue;
@@ -411,7 +419,7 @@ async function firePassesForSide(combat: CombatLike, sideId: string, passes: rea
         for (const pass of passes) {
             const triggers = collectTriggersForToken(tokenDocument, tokenPlaceable, pass, details);
             if (triggers.length === 0) continue;
-            debug(`  combatant=${combatantId} placeable=${placeableId} pass=${pass} firing ${triggers.length} trigger(s)`);
+            debug(`  combatant=${combatantId} placeable=${placeableId} pass=${pass} firing ${triggers.length} trigger(s) -> targets ${placeableUuid}`);
             // Await each macro so the next workflow only starts once this one
             // (rolls + damage) has completed.
             await invokeTriggers(triggers, combatantId, placeableId);
