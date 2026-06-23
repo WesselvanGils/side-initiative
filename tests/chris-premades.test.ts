@@ -607,3 +607,276 @@ test("CPR bridge flushCprBridge drains the serialized turnEnd queue", async () =
         env.restore();
     }
 });
+
+// --- combatUtils side-aware wrap ---
+// CPR's combatUtils gates "on your turn" features on Foundry's single current
+// combatant; in side initiative only the commander is current, so non-commander
+// attackers never get Divine Smite's smite-picker (nor Favored Foe, Divine Fury,
+// …). The wrap redefines "your turn" as "on the active side" for side combats.
+
+interface CombatUtilsEnvOptions {
+    activeSideId?: string;
+    started?: boolean;
+    sideCombat?: boolean;
+}
+
+function installCombatUtilsEnv(options: CombatUtilsEnvOptions = {}) {
+    const { activeSideId = "players", started = true, sideCombat = true } = options;
+
+    const original = {
+        game: globalThis.game,
+        ui: globalThis.ui,
+        Hooks: globalThis.Hooks,
+        canvas: (globalThis as { canvas?: unknown }).canvas,
+        chrisPremades: (globalThis as { chrisPremades?: unknown }).chrisPremades
+    };
+
+    const origIsOwnTurnCalls: unknown[] = [];
+    const origPerTurnCheckCalls: Array<{ entity: unknown; name: unknown; ownTurnOnly: unknown; tokenId: unknown }> = [];
+    const origGetCurrentCalls: number[] = [];
+
+    function makeCombatant(id: string, sideId: string) {
+        return {
+            id,
+            actor: { id: `${id}-actor`, uuid: `${id}-actor-uuid` },
+            defeated: false,
+            getFlag(scope: string, key: string) {
+                if (sideCombat && scope === "side-initiative" && key === "sideId") return sideId;
+                return null;
+            }
+        };
+    }
+
+    const commander = makeCombatant("c-commander", "players");
+    const member = makeCombatant("c-member", "players");
+    const offside = makeCombatant("c-offside", "monsters");
+
+    function makeToken(id: string, combatant: ReturnType<typeof makeCombatant>) {
+        // Placeable-like; isTokenOnActiveSide resolves the combatant via token.combatant.
+        return { id, uuid: `${id}-uuid`, document: { id, uuid: `${id}-uuid` }, combatant };
+    }
+    const commanderToken = makeToken("commander", commander);
+    const memberToken = makeToken("member", member);
+    const offsideToken = makeToken("offside", offside);
+    commander.token = commanderToken;
+    member.token = memberToken;
+    offside.token = offsideToken;
+
+    const tokenById: Record<string, unknown> = { commander: commanderToken, member: memberToken, offside: offsideToken };
+    const combatants = [commander, member, offside] as Array<ReturnType<typeof makeCombatant>> & { get?(id: string): ReturnType<typeof makeCombatant> | null };
+    combatants.get = (id: string) => combatants.find((c) => c.id === id) ?? null;
+
+    const combat = {
+        id: "combat-1",
+        started,
+        round: 1,
+        turn: 0,
+        current: { tokenId: "commander", combatantId: "c-commander", turn: 0, round: 1 },
+        combatants,
+        getFlag(scope: string, key: string) {
+            if (sideCombat && scope === "side-initiative" && key === "state") {
+                return {
+                    version: 2,
+                    order: ["players", "monsters"],
+                    sides: {},
+                    lastRolledRound: null,
+                    lastRolls: {},
+                    activeSideId,
+                    activeSideIndex: 0,
+                    activeCombatantId: "c-commander",
+                    commanderIds: { players: "c-commander", monsters: "c-offside" }
+                };
+            }
+            return null;
+        }
+    };
+
+    const combatUtils = {
+        isOwnTurn(token: { id?: string }) {
+            origIsOwnTurnCalls.push(token);
+            return token?.id === "commander";
+        },
+        perTurnCheck(entity: unknown, name: unknown, ownTurnOnly: unknown, tokenId: unknown) {
+            origPerTurnCheckCalls.push({ entity, name, ownTurnOnly, tokenId });
+            return true;
+        },
+        getCurrentCombatantToken() {
+            origGetCurrentCalls.push(origGetCurrentCalls.length);
+            return commanderToken;
+        }
+    };
+
+    globalThis.game = {
+        user: { id: "gm-1", isGM: true, active: true },
+        combat,
+        modules: {
+            get(id: string) {
+                return id === "chris-premades" ? { active: true, version: "1.3.53", data: { version: "1.3.53" } } : null;
+            }
+        }
+    } as unknown as typeof globalThis.game;
+    globalThis.ui = { notifications: { warn() { /* noop */ } } } as unknown as typeof globalThis.ui;
+    globalThis.Hooks = createHooks() as unknown as typeof globalThis.Hooks;
+    (globalThis as { canvas?: unknown }).canvas = { tokens: { get: (id: string) => tokenById[id] ?? null } };
+    (globalThis as { chrisPremades?: unknown }).chrisPremades = {
+        macros: {},
+        utils: { templateUtils: { getTemplatesInToken: () => new Set() }, combatUtils }
+    };
+
+    function emitHook(name: string, ...args: unknown[]) {
+        for (const fn of (globalThis.Hooks as unknown as ReturnType<typeof createHooks>).get(name)) fn(...args);
+    }
+
+    return {
+        combatUtils,
+        combat,
+        commanderToken,
+        memberToken,
+        offsideToken,
+        origIsOwnTurnCalls,
+        origPerTurnCheckCalls,
+        origGetCurrentCalls,
+        emitHook,
+        restore() {
+            globalThis.game = original.game as typeof globalThis.game;
+            globalThis.ui = original.ui as typeof globalThis.ui;
+            globalThis.Hooks = original.Hooks as typeof globalThis.Hooks;
+            (globalThis as { canvas?: unknown }).canvas = original.canvas;
+            (globalThis as { chrisPremades?: unknown }).chrisPremades = original.chrisPremades;
+            resetCprPremadesIntegrationState();
+        }
+    };
+}
+
+test("combatUtils.isOwnTurn treats active-side tokens as their own turn (side combat)", () => {
+    const env = installCombatUtilsEnv();
+    try {
+        registerChrisPremadesIntegration();
+
+        assert.equal(env.combatUtils.isOwnTurn(env.memberToken), true);
+        assert.equal(env.combatUtils.isOwnTurn(env.offsideToken), false);
+        // Side-aware path: CPR's original (current-combatant) check is bypassed.
+        assert.equal(env.origIsOwnTurnCalls.length, 0);
+    } finally {
+        env.restore();
+    }
+});
+
+test("combatUtils.isOwnTurn falls back to CPR's original for regular combats", () => {
+    const env = installCombatUtilsEnv({ sideCombat: false });
+    try {
+        registerChrisPremadesIntegration();
+
+        // Not a side combat → original runs with the token.
+        assert.equal(env.combatUtils.isOwnTurn(env.memberToken), false);
+        assert.equal(env.origIsOwnTurnCalls.length, 1);
+    } finally {
+        env.restore();
+    }
+});
+
+test("combatUtils.perTurnCheck satisfies the ownTurnOnly gate for active-side tokens", () => {
+    const env = installCombatUtilsEnv();
+    try {
+        registerChrisPremadesIntegration();
+
+        // Member is on the active side → gate satisfied, CPR once-per-turn check
+        // runs with ownTurnOnly=false (no literal-combatant comparison).
+        assert.equal(env.combatUtils.perTurnCheck({ id: "fury" }, "divineFury", true, "member"), true);
+        assert.equal(env.origPerTurnCheckCalls.length, 1);
+        assert.equal(env.origPerTurnCheckCalls[0].ownTurnOnly, false);
+        assert.equal(env.origPerTurnCheckCalls[0].tokenId, "member");
+    } finally {
+        env.restore();
+    }
+});
+
+test("combatUtils.perTurnCheck blocks off-side tokens and skips CPR's check", () => {
+    const env = installCombatUtilsEnv();
+    try {
+        registerChrisPremadesIntegration();
+
+        assert.equal(env.combatUtils.perTurnCheck({ id: "fury" }, "divineFury", true, "offside"), false);
+        // Off the active side → early false; CPR's once-per-turn check never runs.
+        assert.equal(env.origPerTurnCheckCalls.length, 0);
+    } finally {
+        env.restore();
+    }
+});
+
+test("combatUtils.perTurnCheck is untouched for non-ownTurnOnly / non-side cases", () => {
+    const env = installCombatUtilsEnv({ sideCombat: false });
+    try {
+        registerChrisPremadesIntegration();
+
+        // ownTurnOnly unchanged for regular combats.
+        assert.equal(env.combatUtils.perTurnCheck({ id: "fury" }, "divineFury", true, "member"), true);
+        assert.equal(env.origPerTurnCheckCalls[0].ownTurnOnly, true);
+    } finally {
+        env.restore();
+    }
+});
+
+test("combatUtils.getCurrentCombatantToken answers with the tracked acting workflow token", () => {
+    const env = installCombatUtilsEnv();
+    try {
+        registerChrisPremadesIntegration();
+
+        // No active workflow → CPR's original (commander) is used.
+        assert.equal(env.combatUtils.getCurrentCombatantToken(), env.commanderToken);
+        assert.equal(env.origGetCurrentCalls.length, 1);
+
+        // A non-commander attack starts a workflow → the attacker's token is tracked.
+        env.emitHook("midi-qol.preAttackRoll", { id: "wf-member", token: env.memberToken });
+        assert.equal(env.combatUtils.getCurrentCombatantToken(), env.memberToken);
+        // Divine Smite's `!= workflow.token` gate now passes for the member.
+        assert.equal(env.origGetCurrentCalls.length, 1);
+    } finally {
+        env.restore();
+    }
+});
+
+test("combatUtils.getCurrentCombatantToken stops tracking once the workflow completes", () => {
+    const env = installCombatUtilsEnv();
+    try {
+        registerChrisPremadesIntegration();
+        env.emitHook("midi-qol.preAttackRoll", { id: "wf-member", token: env.memberToken });
+
+        env.emitHook("midi-qol.RollComplete", { id: "wf-member" });
+
+        // Tracker drained → falls back to CPR's original.
+        assert.equal(env.combatUtils.getCurrentCombatantToken(), env.commanderToken);
+        assert.equal(env.origGetCurrentCalls.length, 1);
+    } finally {
+        env.restore();
+    }
+});
+
+test("combatUtils.getCurrentCombatantToken does not return an off-side tracked token", () => {
+    const env = installCombatUtilsEnv();
+    try {
+        registerChrisPremadesIntegration();
+        // An off-side workflow (e.g. a reaction on the opposing side) must not be
+        // mistaken for the active turn-taker.
+        env.emitHook("midi-qol.preAttackRoll", { id: "wf-offside", token: env.offsideToken });
+        assert.equal(env.combatUtils.getCurrentCombatantToken(), env.commanderToken);
+    } finally {
+        env.restore();
+    }
+});
+
+test("combatUtils wrap is idempotent across repeated registration", () => {
+    const env = installCombatUtilsEnv();
+    try {
+        registerChrisPremadesIntegration();
+        const afterFirst = env.combatUtils.isOwnTurn;
+        registerChrisPremadesIntegration();
+        const afterSecond = env.combatUtils.isOwnTurn;
+
+        // Second registration must not re-wrap (which would capture the wrapped fn
+        // as the "original" and recurse on the non-side path).
+        assert.equal(afterFirst, afterSecond);
+    } finally {
+        env.restore();
+    }
+});

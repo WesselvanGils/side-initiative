@@ -1,7 +1,14 @@
 import { registerSideTurnEndFlusher } from "../api.js";
-import { getCombatantsForSide, isSideCombat } from "../logic.js";
+import { getCombatantsForSide, isSideCombat, isTokenOnActiveSide } from "../logic.js";
 import { hooks, isPrimaryGMClient } from "../runtime.js";
 import type { CombatLike, CombatantLike, SideTurnPayload, TokenLike } from "../types.js";
+
+/**
+ * Marker stamped onto CPR's `combatUtils` object once it has been wrapped, so a
+ * second `wrapCprCombatUtils` call is a no-op (otherwise the already-wrapped
+ * functions would be captured as the "originals" and recurse).
+ */
+const CPR_COMBAT_UTILS_PATCH = Symbol.for("side-initiative.cpr-combat-utils-patch");
 
 /**
  * Opt-in bridge diagnostics. In the Foundry console (F12) run
@@ -120,6 +127,10 @@ interface ChrisPremadesIntegrationState {
     updateCombatWrapped: boolean;
     originalUpdateCombat: ((...args: unknown[]) => unknown) | null;
     wrappedUpdateCombat: ((...args: unknown[]) => unknown) | null;
+    /** CPR `combatUtils` (isOwnTurn/perTurnCheck/getCurrentCombatantToken) wrapped side-aware. */
+    combatUtilsWrapped: boolean;
+    /** midi-qol workflow-token tracker hooks registered. */
+    trackerHooksRegistered: boolean;
 }
 
 const integrationState: ChrisPremadesIntegrationState = {
@@ -130,7 +141,9 @@ const integrationState: ChrisPremadesIntegrationState = {
     bridgeRegistered: false,
     updateCombatWrapped: false,
     originalUpdateCombat: null,
-    wrappedUpdateCombat: null
+    wrappedUpdateCombat: null,
+    combatUtilsWrapped: false,
+    trackerHooksRegistered: false
 };
 
 function getCprModule(): { active?: boolean; version?: string; data?: { version?: string } } | null {
@@ -178,6 +191,9 @@ export function resetCprPremadesIntegrationState(): void {
     integrationState.updateCombatWrapped = false;
     integrationState.originalUpdateCombat = null;
     integrationState.wrappedUpdateCombat = null;
+    integrationState.combatUtilsWrapped = false;
+    integrationState.trackerHooksRegistered = false;
+    activeWorkflowTokens.length = 0;
 }
 
 function warnOnce(key: string, message: string): void {
@@ -520,6 +536,150 @@ function wrapCprUpdateCombat(): boolean {
 }
 
 /**
+ * CPR's `combatUtils` object (exposed at `globalThis.chrisPremades.utils.combatUtils`).
+ * It is the same live ES-module object CPR's own macros import, so wrapping its
+ * methods here makes CPR's internal calls use the wrapped versions. `PropertyKey`
+ * so the patch `Symbol` can mark it without a separate index type.
+ */
+type CprCombatUtils = Record<PropertyKey, unknown>;
+
+function getCprCombatUtils(): CprCombatUtils | null {
+    const utils = getCprApi()?.utils as Record<string, unknown> | undefined;
+    const combatUtils = utils?.combatUtils;
+    return combatUtils && typeof combatUtils === "object" ? (combatUtils as CprCombatUtils) : null;
+}
+
+/**
+ * Whether side-initiative "on your turn" semantics should override CPR's
+ * single-current-combatant checks: a started combat under side control.
+ */
+function shouldApplySideTurnSemantics(): boolean {
+    const combat = game?.combat as CombatLike | null | undefined;
+    return Boolean(combat?.started && isSideCombat(combat));
+}
+
+/**
+ * Resolve a token id (as CPR passes to `perTurnCheck`) to its canvas placeable,
+ * reading `canvas` through `globalThis` so this no-ops in environments without it.
+ */
+function resolveTokenPlaceable(tokenId: unknown): unknown {
+    if (typeof tokenId !== "string" || !tokenId) return null;
+    return (globalThis as { canvas?: { tokens?: { get?(id: string): unknown } } }).canvas?.tokens?.get?.(tokenId) ?? null;
+}
+
+/**
+ * Tracks the token of the midi-qol workflow currently in flight on this client,
+ * so CPR's no-argument `getCurrentCombatantToken()` can answer with the *acting*
+ * token (not just the commander). Pushed on workflow start, popped on completion;
+ * an array tolerates the nested workflows CPR itself spawns (e.g. Divine Smite's
+ * `workflowUtils.completeItemUse`).
+ */
+const activeWorkflowTokens: Array<{ id: string; token: unknown }> = [];
+
+function pushActiveWorkflowToken(workflow: { id?: string; token?: unknown } | null | undefined): void {
+    const id = workflow?.id;
+    if (!id) return;
+    activeWorkflowTokens.push({ id, token: workflow?.token ?? null });
+}
+
+function popActiveWorkflowToken(workflow: { id?: string } | null | undefined): void {
+    const id = workflow?.id;
+    if (!id) return;
+    for (let index = activeWorkflowTokens.length - 1; index >= 0; index -= 1) {
+        if (activeWorkflowTokens[index].id === id) {
+            activeWorkflowTokens.splice(index, 1);
+            return;
+        }
+    }
+}
+
+/** The most recently started in-flight workflow's token (the acting token). */
+function getActiveWorkflowToken(): unknown {
+    return activeWorkflowTokens.length ? activeWorkflowTokens[activeWorkflowTokens.length - 1].token : null;
+}
+
+/**
+ * Register the midi-qol hooks that feed the active-workflow-token tracker. Runs on
+ * every client (the pop-up renders on the attacking player's client, which is
+ * where their workflow — and CPR's macro — run). Idempotent.
+ */
+function registerCprSideTurnTracker(): void {
+    if (integrationState.trackerHooksRegistered) return;
+    integrationState.trackerHooksRegistered = true;
+    hooks()?.on("midi-qol.preAttackRoll", (workflow: { id?: string; token?: unknown } | null | undefined) => {
+        pushActiveWorkflowToken(workflow ?? null);
+    });
+    hooks()?.on("midi-qol.RollComplete", (workflow: { id?: string } | null | undefined) => {
+        popActiveWorkflowToken(workflow ?? null);
+    });
+}
+
+/**
+ * Wrap CPR's `combatUtils` turn-gates so that in a side combat a token is treated
+ * as "on its turn" iff it is on the active side — instead of only when it is
+ * Foundry's single current combatant. Without this, on-hit / per-turn CPR features
+ * (Divine Smite's smite-picker, Favored Foe, Divine Fury, Brutal Strike, …) never
+ * fire for non-commander players. Regular combats are untouched (the wrapped
+ * functions defer to the originals whenever there is no active side combat).
+ *
+ * - `isOwnTurn(token)` and `perTurnCheck(..., ownTurnOnly, tokenId)` receive the
+ *   token, so the side check is exact.
+ * - `getCurrentCombatantToken()` takes no argument; it answers with the tracked
+ *   acting-workflow token (so Divine Smite's `!= workflow.token` gate passes for
+ *   the attacker), falling back to CPR's value when no workflow is in flight.
+ */
+function wrapCprCombatUtils(): boolean {
+    if (integrationState.combatUtilsWrapped) return true;
+    const combatUtils = getCprCombatUtils();
+    if (!combatUtils) return false;
+    if (combatUtils[CPR_COMBAT_UTILS_PATCH]) {
+        integrationState.combatUtilsWrapped = true;
+        return true;
+    }
+
+    const originalIsOwnTurn = combatUtils.isOwnTurn;
+    const originalPerTurnCheck = combatUtils.perTurnCheck;
+    const originalGetCurrentCombatantToken = combatUtils.getCurrentCombatantToken;
+    if (typeof originalIsOwnTurn !== "function" || typeof originalPerTurnCheck !== "function" || typeof originalGetCurrentCombatantToken !== "function") {
+        return false;
+    }
+
+    combatUtils.isOwnTurn = function isOwnTurnSideInitiative(this: unknown, token: unknown): boolean {
+        if (shouldApplySideTurnSemantics() && token) {
+            return isTokenOnActiveSide(token as TokenLike);
+        }
+        return Boolean((originalIsOwnTurn as (token: unknown) => unknown).call(this, token));
+    };
+
+    combatUtils.perTurnCheck = function perTurnCheckSideInitiative(this: unknown, entity: unknown, name: unknown, ownTurnOnly: unknown, tokenId: unknown): boolean {
+        if (shouldApplySideTurnSemantics() && ownTurnOnly) {
+            const token = resolveTokenPlaceable(tokenId);
+            if (token) {
+                // Off the active side → genuinely not their turn.
+                if (!isTokenOnActiveSide(token as TokenLike)) return false;
+                // On the active side → satisfy the ownTurnOnly gate, then run CPR's
+                // per-entity once-per-turn check (ownTurnOnly=false skips the literal
+                // current-combatant comparison but keeps the currentTurn() dedup).
+                return Boolean((originalPerTurnCheck as (...args: unknown[]) => unknown).call(this, entity, name, false, tokenId));
+            }
+        }
+        return Boolean((originalPerTurnCheck as (...args: unknown[]) => unknown).call(this, entity, name, ownTurnOnly, tokenId));
+    };
+
+    combatUtils.getCurrentCombatantToken = function getCurrentCombatantTokenSideInitiative(this: unknown): unknown {
+        if (shouldApplySideTurnSemantics()) {
+            const active = getActiveWorkflowToken();
+            if (active && isTokenOnActiveSide(active as TokenLike)) return active;
+        }
+        return (originalGetCurrentCombatantToken as () => unknown).call(this);
+    };
+
+    combatUtils[CPR_COMBAT_UTILS_PATCH] = true;
+    integrationState.combatUtilsWrapped = true;
+    return true;
+}
+
+/**
  * Register the Chris' Premades compatibility bridge: fire CPR `turnStart`/
  * `turnEnd` template and region macro passes for every non-commander token on the
  * active side so area spells (Hunger of Hadar, Wall of Fire, ...) affect all
@@ -530,7 +690,9 @@ export function registerChrisPremadesIntegration(): void {
 
     integrationState.version = getCprPremadesVersion();
     registerSideTurnBridge();
+    registerCprSideTurnTracker();
     wrapCprUpdateCombat();
+    wrapCprCombatUtils();
 
     if (validateCprShape()) {
         integrationState.status = "active";
@@ -540,11 +702,12 @@ export function registerChrisPremadesIntegration(): void {
 
     // CPR populates `globalThis.chrisPremades` and registers its hooks during its
     // own ready (`cprReady`), which may run after this module's ready. Retry the
-    // wrap then; the bridge re-checks the API shape on every fire regardless.
+    // wraps then; the bridge re-checks the API shape on every fire regardless.
     integrationState.status = "inactive";
     integrationState.reason = "Chris' Premades API not yet available.";
     hooks()?.once("cprReady", () => {
         wrapCprUpdateCombat();
+        wrapCprCombatUtils();
         if (validateCprShape()) {
             integrationState.status = "active";
             integrationState.reason = null;
