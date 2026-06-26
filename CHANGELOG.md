@@ -1,5 +1,15 @@
 ## [unreleased]
 
+### 🐛 Bug Fixes
+
+- *(cpr)* On attack triggers such as smites now work
+- Players now have proper permissions configured
+
+### 📚 Documentation
+
+- Todo list
+## [1.3.0] - 2026-06-21
+
 ### 🚀 Features
 
 - Legendary actions windows (LAWs)
@@ -28,6 +38,7 @@
 ### 📚 Documentation
 
 - Bug lies within CPR but is an edge case, will fix with v14
+- *(changelog)* Update changelog
 
 ### ⚙️ Miscellaneous Tasks
 
