@@ -158,7 +158,7 @@ export function addCommanderControl(app: TrackerApp, row: HTMLElement, combat: C
 
     const combatant = getCombatantForRow(app, row);
     if (!combatant) return null;
-    if (!getSideInitiative()?.canUserSetCommander?.(combatant, game?.user as never)) return null;
+    if (!getSideInitiative()?.canUserSetCommander?.(combatant, game?.user as never, combat)) return null;
 
     const button = createCommanderControl(app, combat, combatant);
     if (!button) return null;
@@ -184,7 +184,7 @@ export function addCombatantContextOptions(app: TrackerApp, menuItems: ContextMe
         condition: (li: HTMLElement) => {
             const combatant = getCombatantForRow(app, li);
             if (!combatant) return false;
-            if (!getSideInitiative()?.canUserSetCommander?.(combatant, game?.user as never)) return false;
+            if (!getSideInitiative()?.canUserSetCommander?.(combatant, game?.user as never, combat)) return false;
             const sideId = getCombatantSideId(combatant);
             if (!sideId) return false;
             return getSideInitiative()?.getSideCommander?.(combat, sideId)?.id !== combatant.id;

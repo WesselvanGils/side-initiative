@@ -20,6 +20,7 @@ import type {
     SideGroupOptions,
     SideRollResult,
     TokenLike,
+    UserLike,
     WorkflowLike
 } from "./types.js";
 
@@ -243,6 +244,30 @@ export function getCombatantsForSide(
     return combatants.filter((combatant) => {
         if (!includeDefeated && combatant.defeated) return false;
         return getCombatantSideId(combatant, { groupByDisposition }) === normalizedId;
+    });
+}
+
+/**
+ * Determine whether a user owns at least one combatant on the given side.
+ *
+ * Unlike {@link isPlayerOwnedCombatant} (a user-agnostic flag), this performs a
+ * per-user ownership test so it can authorize a specific player. Defeated
+ * combatants never count toward membership.
+ */
+export function isUserOnSide(
+    combat: CombatLike | null | undefined,
+    sideId: string,
+    user: UserLike | null | undefined,
+    { groupByDisposition = true }: SideGroupOptions = {}
+): boolean {
+    if (!combat || !user) return false;
+    const normalizedId = normalizeSideId(sideId);
+    const members = getCombatantsForSide(combat, normalizedId, { includeDefeated: false, groupByDisposition });
+    return members.some((combatant) => {
+        if (typeof combatant?.testUserPermission === "function") {
+            return combatant.testUserPermission(user, "OWNER");
+        }
+        return Boolean(combatant?.isOwner);
     });
 }
 

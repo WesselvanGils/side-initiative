@@ -3,74 +3,81 @@ import assert from "node:assert/strict";
 import { SideInitiativeAPI } from "../src/api.js";
 import { installCombatPatches } from "../src/controller/combat-controller.js";
 
-test("side combat turn controls are gated by commander permissions", async () => {
-    const original = {
-        CONFIG: globalThis.CONFIG,
-        game: globalThis.game
-    };
+type TestCombatState = Record<string, unknown>;
 
-    class Combat {
-        constructor(state) {
-            this.state = state;
-            this.round = 1;
-        }
+const testGlobal = globalThis as unknown as { CONFIG: unknown; game: unknown };
 
-        getFlag(scope, key) {
-            if (scope === "side-initiative" && key === "state") return this.state;
-            return null;
-        }
+test("side combat turn methods route to the side initiative API based on advance permissions", async () => {
+	const original = {
+		CONFIG: testGlobal.CONFIG,
+		game: testGlobal.game,
+	};
 
-        update() {
-            return Promise.resolve(this);
-        }
-    }
+	class Combat {
+		state: TestCombatState;
+		round = 1;
+		declare nextTurn: () => Promise<unknown>;
+		constructor(state: TestCombatState) {
+			this.state = state;
+		}
 
-    globalThis.CONFIG = { Combat: { documentClass: Combat } };
-    globalThis.game = {
-        user: { id: "user-1", isGM: false },
-        combat: null,
-        settings: {
-            get() {
-                return "side-owners";
-            }
-        },
-        sideInitiative: SideInitiativeAPI
-    };
+		getFlag(scope: string, key: string): unknown {
+			if (scope === "side-initiative" && key === "state") return this.state;
+			return null;
+		}
 
-    const originalAdvanceSide = SideInitiativeAPI.advanceSide;
-    const originalCanUserAdvanceSide = SideInitiativeAPI.canUserAdvanceSide;
-    let advanceCalls = 0;
+		update(): Promise<this> {
+			return Promise.resolve(this);
+		}
+	}
 
-    SideInitiativeAPI.advanceSide = async () => {
-        advanceCalls += 1;
-        return "advanced";
-    };
+	testGlobal.CONFIG = { Combat: { documentClass: Combat } };
+	testGlobal.game = {
+		user: { id: "user-1", isGM: false },
+		combat: null,
+		settings: {
+			get() {
+				return "side-owners";
+			},
+		},
+		sideInitiative: SideInitiativeAPI,
+	};
 
-    try {
-        installCombatPatches();
+	const originalRequestAdvanceSide = SideInitiativeAPI.requestAdvanceSide;
+	const originalCanUserAdvanceSide = SideInitiativeAPI.canUserAdvanceSide;
+	let requestCalls = 0;
 
-        const combat = new Combat({
-            activeSideId: "players",
-            order: ["players", "monsters"],
-            sides: {
-                players: { id: "players", combatantIds: ["pc-1"] },
-                monsters: { id: "monsters", combatantIds: ["npc-1"] }
-            }
-        });
+	SideInitiativeAPI.requestAdvanceSide = async () => {
+		requestCalls += 1;
+		return true;
+	};
 
-        SideInitiativeAPI.canUserAdvanceSide = () => false;
-        const blocked = await combat.nextTurn();
-        assert.equal(blocked, combat);
-        assert.equal(advanceCalls, 0);
+	try {
+		installCombatPatches();
 
-        SideInitiativeAPI.canUserAdvanceSide = () => true;
-        const advanced = await combat.nextTurn();
-        assert.equal(advanced, "advanced");
-        assert.equal(advanceCalls, 1);
-    } finally {
-        SideInitiativeAPI.advanceSide = originalAdvanceSide;
-        SideInitiativeAPI.canUserAdvanceSide = originalCanUserAdvanceSide;
-        globalThis.CONFIG = original.CONFIG;
-        globalThis.game = original.game;
-    }
+		const combat = new Combat({
+			activeSideId: "players",
+			order: ["players", "monsters"],
+			sides: {
+				players: { id: "players", combatantIds: ["pc-1"] },
+				monsters: { id: "monsters", combatantIds: ["npc-1"] },
+			},
+		});
+
+		SideInitiativeAPI.canUserAdvanceSide = () => false;
+		SideInitiativeAPI.canUserAdvanceSide = () => false;
+		const blocked = await combat.nextTurn();
+		assert.equal(blocked, combat);
+		assert.equal(requestCalls, 0);
+
+		SideInitiativeAPI.canUserAdvanceSide = () => true;
+		const advanced = await combat.nextTurn();
+		assert.equal(advanced, combat);
+		assert.equal(requestCalls, 1);
+	} finally {
+		SideInitiativeAPI.requestAdvanceSide = originalRequestAdvanceSide;
+		SideInitiativeAPI.canUserAdvanceSide = originalCanUserAdvanceSide;
+		testGlobal.CONFIG = original.CONFIG;
+		testGlobal.game = original.game;
+	}
 });

@@ -7,12 +7,13 @@ import {
     getActiveSideId,
     getCombatantFromActor,
     getCombatantInitiativeWeight,
+    isCombatantOnActiveSide,
+    isUserOnSide,
     getSideCommanderCombatant,
     getSideCommanderId,
     getNextSideId,
     getSideRepresentativeCombatant,
     groupBy,
-    isCombatantOnActiveSide,
     isActorOnActiveSide,
     isSideCombat,
     isTokenOnActiveSide,
@@ -323,6 +324,8 @@ test("setSideCommander updates the commander and active turn for the active side
 });
 
 test("commander permissions respect side owners and GM override", () => {
+    // pc-1 is the configured commander (the side representative); user-1 owns pc-1.
+    // pc-2 is a non-commander side member; user-2 owns pc-2.
     const playerCombatant = createCombatant({ id: "pc-1", ownerIds: ["user-1"], hasPlayerOwner: true, sideId: "players" });
     const otherCombatant = createCombatant({ id: "pc-2", ownerIds: ["user-2"], hasPlayerOwner: true, sideId: "players" });
     const combat = createCombat(
@@ -340,22 +343,70 @@ test("commander permissions respect side owners and GM override", () => {
         [playerCombatant, otherCombatant]
     );
 
+    // Bug 2: user-1 owns a side member (pc-1) and may crown a DIFFERENT same-side ally (pc-2).
+    // Previously the gate tested ownership of pc-2 itself, blocking user-1.
     const userEnv = installCommanderGlobals({ user: { id: "user-1", isGM: false }, commanderControl: "side-owners" });
     try {
-        assert.equal(SideInitiativeAPI.canUserSetCommander(playerCombatant), true);
-        assert.equal(SideInitiativeAPI.canUserSetCommander(otherCombatant), false);
+        assert.equal(SideInitiativeAPI.canUserSetCommander(playerCombatant, undefined, combat), true);
+        assert.equal(SideInitiativeAPI.canUserSetCommander(otherCombatant, undefined, combat), true);
         assert.equal(SideInitiativeAPI.canUserAdvanceSide(combat), true);
     } finally {
         userEnv.restore();
     }
 
+    // Bug 1: user-2 owns a NON-representative side member (pc-2) and may advance the side,
+    // even though the representative (pc-1) is owned by user-1.
+    const user2Env = installCommanderGlobals({ user: { id: "user-2", isGM: false }, commanderControl: "side-owners" });
+    try {
+        assert.equal(SideInitiativeAPI.canUserAdvanceSide(combat), true);
+        assert.equal(SideInitiativeAPI.canUserSetCommander(otherCombatant, undefined, combat), true);
+    } finally {
+        user2Env.restore();
+    }
+
+    // gm-only blocks players at every gate; GMs always pass.
     const gmEnv = installCommanderGlobals({ user: { id: "gm-1", isGM: true }, commanderControl: "gm-only" });
     try {
-        assert.equal(SideInitiativeAPI.canUserSetCommander(otherCombatant), true);
+        assert.equal(SideInitiativeAPI.canUserSetCommander(otherCombatant, undefined, combat), true);
         assert.equal(SideInitiativeAPI.canUserAdvanceSide(combat), true);
     } finally {
         gmEnv.restore();
     }
+
+    const blockedEnv = installCommanderGlobals({ user: { id: "user-1", isGM: false }, commanderControl: "gm-only" });
+    try {
+        assert.equal(SideInitiativeAPI.canUserSetCommander(otherCombatant, undefined, combat), false);
+        assert.equal(SideInitiativeAPI.canUserAdvanceSide(combat), false);
+    } finally {
+        blockedEnv.restore();
+    }
+});
+
+test("isUserOnSide reports per-user side membership", () => {
+    const pc1 = createCombatant({ id: "pc-1", ownerIds: ["user-1"], hasPlayerOwner: true, sideId: "players" });
+    const pc2 = createCombatant({ id: "pc-2", ownerIds: ["user-2"], hasPlayerOwner: true, sideId: "players" });
+    const npc = createCombatant({ id: "npc-1", hasPlayerOwner: false, disposition: -1, sideId: "monsters" });
+    const combat = createCombat([pc1, pc2, npc], {
+        activeSideId: "players",
+        order: ["players", "monsters"],
+        sides: {
+            players: { id: "players", combatantIds: ["pc-1", "pc-2"] },
+            monsters: { id: "monsters", combatantIds: ["npc-1"] }
+        }
+    });
+
+    const user1 = { id: "user-1", isGM: false };
+    const user2 = { id: "user-2", isGM: false };
+    const user3 = { id: "user-3", isGM: false };
+
+    assert.equal(isUserOnSide(combat, "players", user1), true);
+    assert.equal(isUserOnSide(combat, "players", user2), true);
+    assert.equal(isUserOnSide(combat, "players", user3), false);
+    assert.equal(isUserOnSide(combat, "monsters", user1), false);
+
+    // Defeated members do not count toward membership.
+    pc1.defeated = true;
+    assert.equal(isUserOnSide(combat, "players", user1), false);
 });
 
 test("advanceSide uses the combat turn order when it differs from combatant order", async () => {
