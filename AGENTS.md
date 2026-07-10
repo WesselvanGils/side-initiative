@@ -49,6 +49,7 @@ npm run lint          # biome lint .
 npm run check:fix     # biome check --write .     (lint + format in one pass)
 npm run changelog    # git-cliff -o CHANGELOG.md   (requires git-cliff installed)
 npm run release:build -- vX.Y.Z   # build dist/release bundle + zip (local preview of CI)
+npm run release:publish -- vX.Y.Z # publish the version to the Foundry package registry (needs FOUNDRY_RELEASE_TOKEN; run release:build first)
 ```
 
 Local Foundry linking (after pointing `foundry-config.yaml` at your Foundry
@@ -193,6 +194,14 @@ module.ts                 Entry point. Hooks.once("init"/"ready") wires everythi
   URL is stale on purpose. Both are rewritten at release time by
   `tools/build-release.ts`. **Do not manually bump `module.json` version for a
   release** — tag and let the release pipeline handle it.
+- **Foundry package release runs from CI.** The release workflow publishes each
+  tag to the Foundry package registry via `tools/publish-foundry.ts`, gated on a
+  `FOUNDRY_RELEASE_TOKEN` CI secret (a CI instance without the secret skips it).
+  The pipeline mirrors to two CI systems (self-hosted Gitea, then the public
+  GitHub mirror); the publish is idempotent — the API's `unique_together`
+  "version already exists" response is treated as success, so the second run is a
+  no-op. The manifest/notes URLs are derived per-tag from the GitHub release
+  assets.
 - **Monkey-patching is load-bearing.** `controller/combat-controller.ts`
   patches the live `Combat` prototype, and `integration/gambits-premades.ts`
   patches Gambits' Opportunity Attack function. Both are guarded; preserve the

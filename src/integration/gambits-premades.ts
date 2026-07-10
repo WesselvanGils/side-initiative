@@ -8,7 +8,10 @@ const SUPPORTED_OPPORTUNITY_ATTACK_SOURCE_MARKERS = [
     "currentCombatant?.id !== token.object.id",
     "not tokens turn in combat",
     'regionScenario === "onTurnStart"',
-    'let behaviors = region.behaviors.filter(b => b.name === "onExit" || b.name === "onEnter")',
+    // Declaration-keyword-agnostic: the real Gambits source declares this with
+    // `let`, but bundlers/tsx/`useConst` may normalize it to `const`. The filter
+    // expression itself is the invariant we validate against.
+    'behaviors = region.behaviors.filter(b => b.name === "onExit" || b.name === "onEnter")',
 ];
 
 type OpportunityAttackFn = (payload: Record<string, unknown>) => Promise<unknown>;

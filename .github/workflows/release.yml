@@ -53,3 +53,12 @@ jobs:
           files: |
             dist/release/side-initiative/module.json
             dist/release/side-initiative-${{ env.RELEASE_TAG }}.zip
+      - name: Publish to Foundry VTT package registry
+        env:
+          FOUNDRY_RELEASE_TOKEN: ${{ secrets.FOUNDRY_RELEASE_TOKEN }}
+        run: |
+          if [ -z "$FOUNDRY_RELEASE_TOKEN" ]; then
+            echo "FOUNDRY_RELEASE_TOKEN is not set; skipping Foundry package publish."
+            exit 0
+          fi
+          npm run release:publish -- "${RELEASE_TAG}"

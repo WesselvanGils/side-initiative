@@ -15,7 +15,8 @@
         "createSymlinks": "tsx tools/create-symlinks.ts",
         "postinstall": "npm run createSymlinks",
         "changelog": "git-cliff -o CHANGELOG.md",
-        "release:build": "tsx tools/build-release.ts"
+        "release:build": "tsx tools/build-release.ts",
+        "release:publish": "tsx tools/publish-foundry.ts"
     },
     "devDependencies": {
         "@biomejs/biome": "^2.4.10",
