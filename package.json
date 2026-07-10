@@ -3,16 +3,22 @@
     "private": true,
     "type": "module",
     "scripts": {
-        "test": "node --import tsx --test tests/*.test.ts",
         "build": "tsc -p tsconfig.json",
         "build:watch": "tsc -p tsconfig.json --watch",
         "typecheck": "tsc -p tsconfig.json --noEmit",
+        "test": "node --import tsx --test tests/*.test.ts",
+        "format": "biome format --write .",
+        "format:check": "biome format .",
+        "lint": "biome lint .",
+        "lint:fix": "biome lint --write .",
+        "check:fix": "biome check --write .",
         "createSymlinks": "tsx tools/create-symlinks.ts",
         "postinstall": "npm run createSymlinks",
         "changelog": "git-cliff -o CHANGELOG.md",
         "release:build": "tsx tools/build-release.ts"
     },
     "devDependencies": {
+        "@biomejs/biome": "^2.4.10",
         "@types/node": "^26.0.0",
         "fvtt-types": "^13.346.0-beta.20250812191140",
         "js-yaml": "^4.2.0",

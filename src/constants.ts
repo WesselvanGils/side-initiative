@@ -14,12 +14,12 @@ export const SOCKET_EVENT = `module.${MODULE_ID}`;
 
 export const COMMANDER_CONTROL_OPTIONS = {
     sideOwners: "side-owners",
-    gmOnly: "gm-only"
+    gmOnly: "gm-only",
 } as const;
 
 export const INITIATIVE_METHOD_OPTIONS = {
     sideD20: "side-d20",
-    weightedAverage: "weighted-combatant-average"
+    weightedAverage: "weighted-combatant-average",
 } as const;
 
 export const COMBAT_DOCK_SIZE_OPTIONS = {
@@ -27,7 +27,7 @@ export const COMBAT_DOCK_SIZE_OPTIONS = {
     small: "small",
     medium: "medium",
     large: "large",
-    xlarge: "xlarge"
+    xlarge: "xlarge",
 } as const;
 
 export const DEFAULT_SIDE_ORDER: readonly string[] = ["players", "allies", "neutral", "monsters"];
@@ -42,7 +42,7 @@ export const DEFAULT_SIDE_DATA: Record<string, SideSeed> = {
     players: { id: "players", name: "Players", color: "#2d8f5f" },
     allies: { id: "allies", name: "Allies", color: "#4aa86e" },
     neutral: { id: "neutral", name: "Neutral", color: "#777777" },
-    monsters: { id: "monsters", name: "Monsters", color: "#b93a3a" }
+    monsters: { id: "monsters", name: "Monsters", color: "#b93a3a" },
 };
 
 export const SETTINGS = {
@@ -54,5 +54,5 @@ export const SETTINGS = {
     useCombatDock: COMBAT_DOCK_SETTING,
     combatDockSize: COMBAT_DOCK_SIZE_SETTING,
     hideConflictingTopUI: HIDE_CONFLICTING_TOP_UI_SETTING,
-    usePrimaryPartyArt: USE_PRIMARY_PARTY_ART_SETTING
+    usePrimaryPartyArt: USE_PRIMARY_PARTY_ART_SETTING,
 } as const;

@@ -1,5 +1,14 @@
 import { MODULE_ID } from "../constants.js";
-import { collectCombatantSides, getCombatState, normalizeCombatState, normalizeSideData, normalizeSideId, setCombatState, setCombatantSide, setCombatantSideSource } from "../logic.js";
+import {
+    collectCombatantSides,
+    getCombatState,
+    normalizeCombatState,
+    normalizeSideData,
+    normalizeSideId,
+    setCombatState,
+    setCombatantSide,
+    setCombatantSideSource,
+} from "../logic.js";
 import { getSideInitiative } from "../runtime.js";
 import type { CombatLike, CombatantLike, SideData } from "../types.js";
 
@@ -22,7 +31,7 @@ function buildSideRows(combat: CombatLike): SideEditorRow[] {
         .map((sideId): SideEditorRow => {
             const side = normalizeSideData(sideId, {
                 ...(state.sides?.[sideId] ?? {}),
-                ...(sideMap.get(sideId) ?? {})
+                ...(sideMap.get(sideId) ?? {}),
             });
             return { ...side, combatantIds: sideMap.get(sideId)?.combatantIds ?? [] };
         });
@@ -52,11 +61,12 @@ export function openSideEditor(combat: CombatLike | null): void {
     const rows = buildSideRows(combat);
     const sideIds = rows.map((side) => side.id);
     const combatantsCollection = combat.combatants;
-    const combatants: CombatantLike[] = combatantsCollection instanceof Map
-        ? Array.from((combatantsCollection as Map<string, CombatantLike>).values())
-        : Array.isArray(combatantsCollection)
-            ? combatantsCollection
-            : Array.from((combatantsCollection as Iterable<CombatantLike> | undefined) ?? []);
+    const combatants: CombatantLike[] =
+        combatantsCollection instanceof Map
+            ? Array.from((combatantsCollection as Map<string, CombatantLike>).values())
+            : Array.isArray(combatantsCollection)
+              ? combatantsCollection
+              : Array.from((combatantsCollection as Iterable<CombatantLike> | undefined) ?? []);
 
     const content = `
     <form class="side-initiative-editor">
@@ -67,13 +77,17 @@ export function openSideEditor(combat: CombatLike | null): void {
             <tr><th>Side</th><th>Name</th><th>Color</th></tr>
           </thead>
           <tbody>
-            ${rows.map((side) => `
+            ${rows
+                .map(
+                    (side) => `
               <tr data-side-id="${side.id}">
                 <td>${side.id}</td>
                 <td><input type="text" name="side-name-${side.id}" value="${side.name ?? side.id}"></td>
                 <td><input type="text" name="side-color-${side.id}" value="${side.color ?? "#666666"}"></td>
               </tr>
-            `).join("")}
+            `,
+                )
+                .join("")}
           </tbody>
         </table>
       </section>
@@ -110,7 +124,7 @@ export function openSideEditor(combat: CombatLike | null): void {
                         nextSides[sideId] = normalizeSideData(sideId, {
                             ...existing,
                             name: (formData.get(`side-name-${sideId}`) as string | null) ?? existing.name,
-                            color: (formData.get(`side-color-${sideId}`) as string | null) ?? existing.color
+                            color: (formData.get(`side-color-${sideId}`) as string | null) ?? existing.color,
                         });
                     }
 
@@ -126,13 +140,13 @@ export function openSideEditor(combat: CombatLike | null): void {
                     }
 
                     await getSideInitiative()?.refreshCombatantSides?.(combat, { overwrite: false });
-                }
+                },
             },
             cancel: {
                 label: "Cancel",
-                icon: '<i class="fas fa-xmark"></i>'
-            }
+                icon: '<i class="fas fa-xmark"></i>',
+            },
         },
-        default: "save"
+        default: "save",
     }).render(true);
 }

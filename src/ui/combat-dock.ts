@@ -5,7 +5,7 @@ import {
     getSideLabel,
     getSideRepresentativeCombatant,
     getSideSummary,
-    normalizeSideId
+    normalizeSideId,
 } from "../logic.js";
 import { getSideInitiative, getSetting, hooks } from "../runtime.js";
 import type { CombatLike, CombatantLike } from "../types.js";
@@ -101,7 +101,7 @@ export function resolveCombatantImg(combatant: CombatantLike | null | undefined)
         c?.token?.texture?.src,
         c?.token?.img,
         c?.document?.img,
-        c?.actor?.prototypeToken?.texture?.src
+        c?.actor?.prototypeToken?.texture?.src,
     ];
     for (const candidate of candidates) {
         if (typeof candidate === "string" && candidate.trim()) return candidate;
@@ -117,10 +117,12 @@ function buildSidePanel(
     combat: CombatLike | null | undefined,
     sideId: string,
     activeSideId: string | null,
-    { groupByDisposition = true }: { groupByDisposition?: boolean }
+    { groupByDisposition = true }: { groupByDisposition?: boolean },
 ): DockSidePanel | null {
     const normalizedId = normalizeSideId(sideId);
-    const summary = getSideSummary(combat, { groupByDisposition }).find((side) => normalizeSideId(side.id) === normalizedId) ?? null;
+    const summary =
+        getSideSummary(combat, { groupByDisposition }).find((side) => normalizeSideId(side.id) === normalizedId) ??
+        null;
     const representative = getSideRepresentativeCombatant(combat, normalizedId, { groupByDisposition });
     const count = summary?.combatantIds?.length ?? summary?.count ?? 0;
     const name = summary?.name ?? getSideLabel(normalizedId);
@@ -135,7 +137,7 @@ function buildSidePanel(
         combatantId: representative?.id ?? null,
         count,
         active: normalizeSideId(activeSideId) === normalizedId,
-        empty: !representative
+        empty: !representative,
     };
 }
 
@@ -167,9 +169,8 @@ export function getDockState(combat: CombatLike | null | undefined, options: Doc
     }
 
     const normalizedActive = activeSideId ? normalizeSideId(activeSideId) : null;
-    const dividerActive = Boolean(normalizedActive)
-        && normalizedActive !== DOCK_LEFT_SIDE_ID
-        && normalizedActive !== DOCK_RIGHT_SIDE_ID;
+    const dividerActive =
+        Boolean(normalizedActive) && normalizedActive !== DOCK_LEFT_SIDE_ID && normalizedActive !== DOCK_RIGHT_SIDE_ID;
 
     return {
         visible,
@@ -180,7 +181,7 @@ export function getDockState(combat: CombatLike | null | undefined, options: Doc
         rightSideId: DOCK_RIGHT_SIDE_ID,
         left,
         right,
-        dividerActive
+        dividerActive,
     };
 }
 
@@ -203,16 +204,20 @@ export function resolvePrimaryPartyArt(): PartyArt | null {
     if (game?.system?.id !== "dnd5e") return null;
     let setting: unknown;
     try {
-        setting = (game as { settings?: { get?: (scope: string, key: string) => unknown } | null })?.settings?.get?.("dnd5e", "primaryParty");
+        setting = (game as { settings?: { get?: (scope: string, key: string) => unknown } | null })?.settings?.get?.(
+            "dnd5e",
+            "primaryParty",
+        );
     } catch {
         return null;
     }
     let actor: { img?: unknown; name?: unknown } | null | undefined;
     try {
         const ref = (setting as { actor?: unknown } | null)?.actor;
-        actor = typeof ref === "function"
-            ? (ref as () => { img?: unknown; name?: unknown } | null)()
-            : (ref as { img?: unknown; name?: unknown } | null | undefined);
+        actor =
+            typeof ref === "function"
+                ? (ref as () => { img?: unknown; name?: unknown } | null)()
+                : (ref as { img?: unknown; name?: unknown } | null | undefined);
     } catch {
         return null;
     }
@@ -232,7 +237,7 @@ const CONTROL_LABELS: Record<string, string> = {
     "end-combat": "SIDE-INITIATIVE.UI.DockEndCombat",
     "roll-init": "SIDE-INITIATIVE.UI.DockRollInitiative",
     advance: "SIDE-INITIATIVE.UI.DockAdvanceSide",
-    reset: "SIDE-INITIATIVE.UI.DockResetInitiative"
+    reset: "SIDE-INITIATIVE.UI.DockResetInitiative",
 };
 
 /**
@@ -248,7 +253,7 @@ const COMBAT_DOCK_SIZE_PRESETS: Record<string, { size: string; borderWidth: stri
     [COMBAT_DOCK_SIZE_OPTIONS.small]: { size: "132px", borderWidth: "11px", radius: "9px", font: "0.78rem" },
     [COMBAT_DOCK_SIZE_OPTIONS.medium]: { size: "156px", borderWidth: "12px", radius: "10px", font: "0.85rem" },
     [COMBAT_DOCK_SIZE_OPTIONS.large]: { size: "184px", borderWidth: "13px", radius: "11px", font: "0.92rem" },
-    [COMBAT_DOCK_SIZE_OPTIONS.xlarge]: { size: "216px", borderWidth: "15px", radius: "12px", font: "1rem" }
+    [COMBAT_DOCK_SIZE_OPTIONS.xlarge]: { size: "216px", borderWidth: "15px", radius: "12px", font: "1rem" },
 };
 
 /**
@@ -290,7 +295,8 @@ export class CombatDockManager {
     applySize(): void {
         const el = this.element;
         if (!el) return;
-        const preset = COMBAT_DOCK_SIZE_PRESETS[this.getSize()] ?? COMBAT_DOCK_SIZE_PRESETS[COMBAT_DOCK_SIZE_OPTIONS.medium];
+        const preset =
+            COMBAT_DOCK_SIZE_PRESETS[this.getSize()] ?? COMBAT_DOCK_SIZE_PRESETS[COMBAT_DOCK_SIZE_OPTIONS.medium];
         el.style.setProperty("--side-dock-size", preset.size);
         el.style.setProperty("--side-dock-border-width", preset.borderWidth);
         el.style.setProperty("--side-dock-radius", preset.radius);
@@ -342,7 +348,7 @@ export class CombatDockManager {
         const state = getDockState(combat, {
             enabled: this.isEnabled(),
             usePrimaryPartyArt,
-            primaryParty: usePrimaryPartyArt ? resolvePrimaryPartyArt() : null
+            primaryParty: usePrimaryPartyArt ? resolvePrimaryPartyArt() : null,
         });
 
         if (!state.visible) {
@@ -485,19 +491,18 @@ export class CombatDockManager {
      * pulse instead, so the flash matches its shape instead of reading as a square.
      */
     private playFlowAnimation(target: Element, kind: "panel" | "divider"): void {
-        const animatable = target as Element & { animate?: (keyframes: never[], options: Record<string, unknown>) => unknown };
+        const animatable = target as Element & {
+            animate?: (keyframes: never[], options: Record<string, unknown>) => unknown;
+        };
         if (typeof animatable.animate !== "function") return;
-        const keyframes = kind === "divider"
-            ? [
-                { filter: "brightness(1)" },
-                { filter: "brightness(2.4)", offset: 0.4 },
-                { filter: "brightness(1)" }
-            ]
-            : [
-                { boxShadow: "0 0 0 0 rgba(255, 215, 0, 0)", filter: "brightness(1)" },
-                { boxShadow: "0 0 28px 8px rgba(255, 215, 0, 0.9)", filter: "brightness(1.3)", offset: 0.4 },
-                { boxShadow: "0 0 0 0 rgba(255, 215, 0, 0)", filter: "brightness(1)" }
-            ];
+        const keyframes =
+            kind === "divider"
+                ? [{ filter: "brightness(1)" }, { filter: "brightness(2.4)", offset: 0.4 }, { filter: "brightness(1)" }]
+                : [
+                      { boxShadow: "0 0 0 0 rgba(255, 215, 0, 0)", filter: "brightness(1)" },
+                      { boxShadow: "0 0 28px 8px rgba(255, 215, 0, 0.9)", filter: "brightness(1.3)", offset: 0.4 },
+                      { boxShadow: "0 0 0 0 rgba(255, 215, 0, 0)", filter: "brightness(1)" },
+                  ];
         try {
             animatable.animate(keyframes as never[], { duration: 720, easing: "ease-out" });
         } catch {

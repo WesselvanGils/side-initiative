@@ -1,6 +1,11 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { clearSideTurnEndFlushers, registerSideTurnEndFlusher, SideInitiativeAPI } from "../src/api.js";
+import {
+    clearSideTurnEndFlushers,
+    getRoundTimeDelta,
+    registerSideTurnEndFlusher,
+    SideInitiativeAPI,
+} from "../src/api.js";
 import {
     defaultSideIdForCombatant,
     ensureCombatantSideAssignments,
@@ -20,7 +25,7 @@ import {
     normalizeSideId,
     normalizeCombatState,
     rollSideInitiativeData,
-    rollWeightedSideInitiativeData
+    rollWeightedSideInitiativeData,
 } from "../src/logic.js";
 
 function createCombatant({
@@ -31,18 +36,18 @@ function createCombatant({
     sideSource = null,
     ownerIds = [],
     actorXp = null,
-    initiativeTotal = 10
+    initiativeTotal = 10,
 }) {
     const flags = new Map();
     if (sideId) flags.set("side-initiative:sideId", sideId);
     if (sideSource) flags.set("side-initiative:sideSource", sideSource);
-    const xp = actorXp === null ? null : (typeof actorXp === "object" ? actorXp : { value: actorXp });
+    const xp = actorXp === null ? null : typeof actorXp === "object" ? actorXp : { value: actorXp };
     const actor = {
         hasPlayerOwner,
         system: xp ? { details: { xp } } : { details: {} },
         getRollData() {
             return {};
-        }
+        },
     };
 
     return {
@@ -54,14 +59,14 @@ function createCombatant({
         token: { actor },
         isOwner: ownerIds.includes("user-1"),
         testUserPermission(user, permission) {
-            return (permission === "OWNER") && (user?.isGM || ownerIds.includes(user?.id));
+            return permission === "OWNER" && (user?.isGM || ownerIds.includes(user?.id));
         },
         getInitiativeRoll() {
             return {
                 total: initiativeTotal,
                 evaluate: async function evaluate() {
                     return this;
-                }
+                },
             };
         },
         getFlag(scope, key) {
@@ -71,7 +76,7 @@ function createCombatant({
             flags.set(`${scope}:${key}`, value);
             return Promise.resolve(value);
         },
-        flags
+        flags,
     };
 }
 
@@ -96,25 +101,26 @@ function createCombat(combatants, state = null, turns = null) {
         },
         updateEmbeddedDocuments(_type, docs) {
             this.lastEmbedded = docs;
-             for (const doc of docs) {
-                const combatant = this.combatants instanceof Map ? this.combatants.get(doc._id) : this.combatants.find((entry) => entry.id === doc._id);
+            for (const doc of docs) {
+                const combatant =
+                    this.combatants instanceof Map
+                        ? this.combatants.get(doc._id)
+                        : this.combatants.find((entry) => entry.id === doc._id);
                 if (combatant) combatant.initiative = doc.initiative;
             }
             return Promise.resolve();
         },
-        update(data) {
+        update(data, options) {
             this.lastUpdate = data;
+            this.lastUpdateOptions = options;
             if (typeof data.round === "number") this.round = data.round;
             if (typeof data.turn === "number") this.turn = data.turn;
             return Promise.resolve();
-        }
+        },
     };
 }
 
-function installCommanderGlobals({
-    user = { id: "user-1", isGM: false },
-    commanderControl = "side-owners"
-} = {}) {
+function installCommanderGlobals({ user = { id: "user-1", isGM: false }, commanderControl = "side-owners" } = {}) {
     const original = globalThis.game;
     globalThis.game = {
         user,
@@ -124,13 +130,13 @@ function installCommanderGlobals({
                     return commanderControl;
                 }
                 return null;
-            }
-        }
+            },
+        },
     };
     return {
         restore() {
             globalThis.game = original;
-        }
+        },
     };
 }
 
@@ -150,7 +156,13 @@ test("ensureCombatantSideAssignments writes auto groups and preserves manual ove
     const combatants = [
         createCombatant({ id: "pc-1", hasPlayerOwner: true, disposition: 1 }),
         createCombatant({ id: "npc-1", hasPlayerOwner: false, disposition: -1 }),
-        createCombatant({ id: "npc-2", hasPlayerOwner: false, disposition: 0, sideId: "neutral", sideSource: "manual" })
+        createCombatant({
+            id: "npc-2",
+            hasPlayerOwner: false,
+            disposition: 0,
+            sideId: "neutral",
+            sideSource: "manual",
+        }),
     ];
     const combat = createCombat(combatants);
 
@@ -165,10 +177,26 @@ test("ensureCombatantSideAssignments writes auto groups and preserves manual ove
 });
 
 test("getCombatantInitiativeWeight uses xp for NPCs and defaults to one", () => {
-    const player = createCombatant({ id: "pc-1", hasPlayerOwner: true, actorXp: 500 });
-    const lich = createCombatant({ id: "npc-1", hasPlayerOwner: false, actorXp: 3900 });
-    const goblin = createCombatant({ id: "npc-2", hasPlayerOwner: false, actorXp: { value: 50 } });
-    const unknown = createCombatant({ id: "npc-3", hasPlayerOwner: false, actorXp: 0 });
+    const player = createCombatant({
+        id: "pc-1",
+        hasPlayerOwner: true,
+        actorXp: 500,
+    });
+    const lich = createCombatant({
+        id: "npc-1",
+        hasPlayerOwner: false,
+        actorXp: 3900,
+    });
+    const goblin = createCombatant({
+        id: "npc-2",
+        hasPlayerOwner: false,
+        actorXp: { value: 50 },
+    });
+    const unknown = createCombatant({
+        id: "npc-3",
+        hasPlayerOwner: false,
+        actorXp: 0,
+    });
 
     assert.equal(getCombatantInitiativeWeight(player), 1);
     assert.equal(getCombatantInitiativeWeight(lich), 3900);
@@ -179,15 +207,15 @@ test("getCombatantInitiativeWeight uses xp for NPCs and defaults to one", () => 
 test("isActorOnActiveSide resolves an actor combatant and checks the active side", () => {
     const combatants = [
         createCombatant({ id: "pc-1", hasPlayerOwner: true, disposition: 1 }),
-        createCombatant({ id: "npc-1", hasPlayerOwner: false, disposition: -1 })
+        createCombatant({ id: "npc-1", hasPlayerOwner: false, disposition: -1 }),
     ];
     const combat = createCombat(combatants, {
         activeSideId: "players",
         order: ["players", "monsters"],
         sides: {
             players: { id: "players", combatantIds: ["pc-1"] },
-            monsters: { id: "monsters", combatantIds: ["npc-1"] }
-        }
+            monsters: { id: "monsters", combatantIds: ["npc-1"] },
+        },
     });
 
     const playerActor = { combatant: combatants[0] };
@@ -199,19 +227,33 @@ test("isActorOnActiveSide resolves an actor combatant and checks the active side
 });
 
 test("isCombatantOnActiveSide and isTokenOnActiveSide resolve the current side", () => {
-    const playerCombatant = createCombatant({ id: "pc-1", hasPlayerOwner: true, disposition: 1 });
-    const monsterCombatant = createCombatant({ id: "npc-1", hasPlayerOwner: false, disposition: -1 });
+    const playerCombatant = createCombatant({
+        id: "pc-1",
+        hasPlayerOwner: true,
+        disposition: 1,
+    });
+    const monsterCombatant = createCombatant({
+        id: "npc-1",
+        hasPlayerOwner: false,
+        disposition: -1,
+    });
     const combat = createCombat([playerCombatant, monsterCombatant], {
         activeSideId: "players",
         order: ["players", "monsters"],
         sides: {
             players: { id: "players", combatantIds: ["pc-1"] },
-            monsters: { id: "monsters", combatantIds: ["npc-1"] }
-        }
+            monsters: { id: "monsters", combatantIds: ["npc-1"] },
+        },
     });
 
-    const playerToken = { combatant: playerCombatant, actor: { combatant: playerCombatant } };
-    const monsterToken = { combatant: monsterCombatant, actor: { combatant: monsterCombatant } };
+    const playerToken = {
+        combatant: playerCombatant,
+        actor: { combatant: playerCombatant },
+    };
+    const monsterToken = {
+        combatant: monsterCombatant,
+        actor: { combatant: monsterCombatant },
+    };
 
     assert.equal(isSideCombat(combat), true);
     assert.equal(isCombatantOnActiveSide(combat, playerCombatant), true);
@@ -227,8 +269,8 @@ test("normalizeCombatState preserves commander assignments", () => {
     const state = normalizeCombatState({
         version: 1,
         commanderIds: {
-            Players: "pc-1"
-        }
+            Players: "pc-1",
+        },
     });
 
     assert.equal(state.version, 2);
@@ -236,21 +278,31 @@ test("normalizeCombatState preserves commander assignments", () => {
 });
 
 test("getSideRepresentativeCombatant prefers the configured commander", () => {
-    const playerOne = createCombatant({ id: "pc-1", hasPlayerOwner: true, disposition: 1, sideId: "players" });
-    const playerTwo = createCombatant({ id: "pc-2", hasPlayerOwner: true, disposition: 1, sideId: "players" });
+    const playerOne = createCombatant({
+        id: "pc-1",
+        hasPlayerOwner: true,
+        disposition: 1,
+        sideId: "players",
+    });
+    const playerTwo = createCombatant({
+        id: "pc-2",
+        hasPlayerOwner: true,
+        disposition: 1,
+        sideId: "players",
+    });
     const combat = createCombat(
         [playerOne, playerTwo],
         {
             activeSideId: "players",
             order: ["players"],
             sides: {
-                players: { id: "players", combatantIds: ["pc-1", "pc-2"] }
+                players: { id: "players", combatantIds: ["pc-1", "pc-2"] },
             },
             commanderIds: {
-                players: "pc-2"
-            }
+                players: "pc-2",
+            },
         },
-        [playerOne, playerTwo]
+        [playerOne, playerTwo],
     );
 
     assert.equal(getSideCommanderId(combat, "players"), "pc-2");
@@ -259,8 +311,18 @@ test("getSideRepresentativeCombatant prefers the configured commander", () => {
 });
 
 test("getSideRepresentativeCombatant falls back when the commander is defeated", () => {
-    const playerOne = createCombatant({ id: "pc-1", hasPlayerOwner: true, disposition: 1, sideId: "players" });
-    const playerTwo = createCombatant({ id: "pc-2", hasPlayerOwner: true, disposition: 1, sideId: "players" });
+    const playerOne = createCombatant({
+        id: "pc-1",
+        hasPlayerOwner: true,
+        disposition: 1,
+        sideId: "players",
+    });
+    const playerTwo = createCombatant({
+        id: "pc-2",
+        hasPlayerOwner: true,
+        disposition: 1,
+        sideId: "players",
+    });
     playerTwo.defeated = true;
     const combat = createCombat(
         [playerOne, playerTwo],
@@ -268,13 +330,13 @@ test("getSideRepresentativeCombatant falls back when the commander is defeated",
             activeSideId: "players",
             order: ["players"],
             sides: {
-                players: { id: "players", combatantIds: ["pc-1", "pc-2"] }
+                players: { id: "players", combatantIds: ["pc-1", "pc-2"] },
             },
             commanderIds: {
-                players: "pc-2"
-            }
+                players: "pc-2",
+            },
         },
-        [playerOne, playerTwo]
+        [playerOne, playerTwo],
     );
 
     assert.equal(getSideCommanderCombatant(combat, "players"), null);
@@ -282,37 +344,65 @@ test("getSideRepresentativeCombatant falls back when the commander is defeated",
 });
 
 test("getSideRepresentativeCombatant picks the highest-weight member when no commander is set", () => {
-    const goblin = createCombatant({ id: "goblin", disposition: -1, sideId: "monsters", actorXp: 50 });
-    const warlord = createCombatant({ id: "warlord", disposition: -1, sideId: "monsters", actorXp: 2300 });
-    const orc = createCombatant({ id: "orc", disposition: -1, sideId: "monsters", actorXp: 450 });
+    const goblin = createCombatant({
+        id: "goblin",
+        disposition: -1,
+        sideId: "monsters",
+        actorXp: 50,
+    });
+    const warlord = createCombatant({
+        id: "warlord",
+        disposition: -1,
+        sideId: "monsters",
+        actorXp: 2300,
+    });
+    const orc = createCombatant({
+        id: "orc",
+        disposition: -1,
+        sideId: "monsters",
+        actorXp: 450,
+    });
     const combat = createCombat(
         [goblin, warlord, orc],
         {
             activeSideId: "monsters",
             order: ["monsters"],
             sides: {
-                monsters: { id: "monsters", combatantIds: ["goblin", "warlord", "orc"] }
-            }
+                monsters: {
+                    id: "monsters",
+                    combatantIds: ["goblin", "warlord", "orc"],
+                },
+            },
         },
-        [goblin, warlord, orc]
+        [goblin, warlord, orc],
     );
 
     assert.equal(getSideRepresentativeCombatant(combat, "monsters"), warlord);
 });
 
 test("setSideCommander updates the commander and active turn for the active side", async () => {
-    const playerOne = createCombatant({ id: "pc-1", hasPlayerOwner: true, disposition: 1, sideId: "players" });
-    const playerTwo = createCombatant({ id: "pc-2", hasPlayerOwner: true, disposition: 1, sideId: "players" });
+    const playerOne = createCombatant({
+        id: "pc-1",
+        hasPlayerOwner: true,
+        disposition: 1,
+        sideId: "players",
+    });
+    const playerTwo = createCombatant({
+        id: "pc-2",
+        hasPlayerOwner: true,
+        disposition: 1,
+        sideId: "players",
+    });
     const combat = createCombat(
         [playerOne, playerTwo],
         {
             activeSideId: "players",
             order: ["players"],
             sides: {
-                players: { id: "players", combatantIds: ["pc-1", "pc-2"] }
-            }
+                players: { id: "players", combatantIds: ["pc-1", "pc-2"] },
+            },
         },
-        [playerOne, playerTwo]
+        [playerOne, playerTwo],
     );
 
     const state = await SideInitiativeAPI.setSideCommander(combat, playerTwo);
@@ -326,26 +416,39 @@ test("setSideCommander updates the commander and active turn for the active side
 test("commander permissions respect side owners and GM override", () => {
     // pc-1 is the configured commander (the side representative); user-1 owns pc-1.
     // pc-2 is a non-commander side member; user-2 owns pc-2.
-    const playerCombatant = createCombatant({ id: "pc-1", ownerIds: ["user-1"], hasPlayerOwner: true, sideId: "players" });
-    const otherCombatant = createCombatant({ id: "pc-2", ownerIds: ["user-2"], hasPlayerOwner: true, sideId: "players" });
+    const playerCombatant = createCombatant({
+        id: "pc-1",
+        ownerIds: ["user-1"],
+        hasPlayerOwner: true,
+        sideId: "players",
+    });
+    const otherCombatant = createCombatant({
+        id: "pc-2",
+        ownerIds: ["user-2"],
+        hasPlayerOwner: true,
+        sideId: "players",
+    });
     const combat = createCombat(
         [playerCombatant, otherCombatant],
         {
             activeSideId: "players",
             order: ["players"],
             sides: {
-                players: { id: "players", combatantIds: ["pc-1", "pc-2"] }
+                players: { id: "players", combatantIds: ["pc-1", "pc-2"] },
             },
             commanderIds: {
-                players: "pc-1"
-            }
+                players: "pc-1",
+            },
         },
-        [playerCombatant, otherCombatant]
+        [playerCombatant, otherCombatant],
     );
 
     // Bug 2: user-1 owns a side member (pc-1) and may crown a DIFFERENT same-side ally (pc-2).
     // Previously the gate tested ownership of pc-2 itself, blocking user-1.
-    const userEnv = installCommanderGlobals({ user: { id: "user-1", isGM: false }, commanderControl: "side-owners" });
+    const userEnv = installCommanderGlobals({
+        user: { id: "user-1", isGM: false },
+        commanderControl: "side-owners",
+    });
     try {
         assert.equal(SideInitiativeAPI.canUserSetCommander(playerCombatant, undefined, combat), true);
         assert.equal(SideInitiativeAPI.canUserSetCommander(otherCombatant, undefined, combat), true);
@@ -356,7 +459,10 @@ test("commander permissions respect side owners and GM override", () => {
 
     // Bug 1: user-2 owns a NON-representative side member (pc-2) and may advance the side,
     // even though the representative (pc-1) is owned by user-1.
-    const user2Env = installCommanderGlobals({ user: { id: "user-2", isGM: false }, commanderControl: "side-owners" });
+    const user2Env = installCommanderGlobals({
+        user: { id: "user-2", isGM: false },
+        commanderControl: "side-owners",
+    });
     try {
         assert.equal(SideInitiativeAPI.canUserAdvanceSide(combat), true);
         assert.equal(SideInitiativeAPI.canUserSetCommander(otherCombatant, undefined, combat), true);
@@ -365,7 +471,10 @@ test("commander permissions respect side owners and GM override", () => {
     }
 
     // gm-only blocks players at every gate; GMs always pass.
-    const gmEnv = installCommanderGlobals({ user: { id: "gm-1", isGM: true }, commanderControl: "gm-only" });
+    const gmEnv = installCommanderGlobals({
+        user: { id: "gm-1", isGM: true },
+        commanderControl: "gm-only",
+    });
     try {
         assert.equal(SideInitiativeAPI.canUserSetCommander(otherCombatant, undefined, combat), true);
         assert.equal(SideInitiativeAPI.canUserAdvanceSide(combat), true);
@@ -373,7 +482,10 @@ test("commander permissions respect side owners and GM override", () => {
         gmEnv.restore();
     }
 
-    const blockedEnv = installCommanderGlobals({ user: { id: "user-1", isGM: false }, commanderControl: "gm-only" });
+    const blockedEnv = installCommanderGlobals({
+        user: { id: "user-1", isGM: false },
+        commanderControl: "gm-only",
+    });
     try {
         assert.equal(SideInitiativeAPI.canUserSetCommander(otherCombatant, undefined, combat), false);
         assert.equal(SideInitiativeAPI.canUserAdvanceSide(combat), false);
@@ -383,16 +495,31 @@ test("commander permissions respect side owners and GM override", () => {
 });
 
 test("isUserOnSide reports per-user side membership", () => {
-    const pc1 = createCombatant({ id: "pc-1", ownerIds: ["user-1"], hasPlayerOwner: true, sideId: "players" });
-    const pc2 = createCombatant({ id: "pc-2", ownerIds: ["user-2"], hasPlayerOwner: true, sideId: "players" });
-    const npc = createCombatant({ id: "npc-1", hasPlayerOwner: false, disposition: -1, sideId: "monsters" });
+    const pc1 = createCombatant({
+        id: "pc-1",
+        ownerIds: ["user-1"],
+        hasPlayerOwner: true,
+        sideId: "players",
+    });
+    const pc2 = createCombatant({
+        id: "pc-2",
+        ownerIds: ["user-2"],
+        hasPlayerOwner: true,
+        sideId: "players",
+    });
+    const npc = createCombatant({
+        id: "npc-1",
+        hasPlayerOwner: false,
+        disposition: -1,
+        sideId: "monsters",
+    });
     const combat = createCombat([pc1, pc2, npc], {
         activeSideId: "players",
         order: ["players", "monsters"],
         sides: {
             players: { id: "players", combatantIds: ["pc-1", "pc-2"] },
-            monsters: { id: "monsters", combatantIds: ["npc-1"] }
-        }
+            monsters: { id: "monsters", combatantIds: ["npc-1"] },
+        },
     });
 
     const user1 = { id: "user-1", isGM: false };
@@ -410,10 +537,26 @@ test("isUserOnSide reports per-user side membership", () => {
 });
 
 test("advanceSide uses the combat turn order when it differs from combatant order", async () => {
-    const p1 = createCombatant({ id: "pc-1", hasPlayerOwner: true, disposition: 1 });
-    const p2 = createCombatant({ id: "pc-2", hasPlayerOwner: true, disposition: 1 });
-    const m1 = createCombatant({ id: "npc-1", hasPlayerOwner: false, disposition: -1 });
-    const m2 = createCombatant({ id: "npc-2", hasPlayerOwner: false, disposition: -1 });
+    const p1 = createCombatant({
+        id: "pc-1",
+        hasPlayerOwner: true,
+        disposition: 1,
+    });
+    const p2 = createCombatant({
+        id: "pc-2",
+        hasPlayerOwner: true,
+        disposition: 1,
+    });
+    const m1 = createCombatant({
+        id: "npc-1",
+        hasPlayerOwner: false,
+        disposition: -1,
+    });
+    const m2 = createCombatant({
+        id: "npc-2",
+        hasPlayerOwner: false,
+        disposition: -1,
+    });
     const combat = createCombat(
         [p1, p2, m1, m2],
         {
@@ -421,10 +564,10 @@ test("advanceSide uses the combat turn order when it differs from combatant orde
             order: ["players", "monsters"],
             sides: {
                 players: { id: "players", combatantIds: ["pc-1", "pc-2"] },
-                monsters: { id: "monsters", combatantIds: ["npc-1", "npc-2"] }
-            }
+                monsters: { id: "monsters", combatantIds: ["npc-1", "npc-2"] },
+            },
         },
-        [p1, m1, p2, m2]
+        [p1, m1, p2, m2],
     );
 
     await SideInitiativeAPI.advanceSide(combat, 1);
@@ -439,9 +582,100 @@ test("advanceSide uses the combat turn order when it differs from combatant orde
     assert.equal(getActiveSideId(combat), "players");
 });
 
+test("getRoundTimeDelta maps round deltas to CONFIG.time.roundTime seconds", () => {
+    const configHolder = globalThis as {
+        CONFIG?: { time?: { roundTime?: number } };
+    };
+    const originalConfig = configHolder.CONFIG;
+    configHolder.CONFIG = { time: { roundTime: 6 } };
+    try {
+        assert.equal(getRoundTimeDelta(0), 0);
+        assert.equal(getRoundTimeDelta(1), 6);
+        assert.equal(getRoundTimeDelta(2), 12);
+        assert.equal(getRoundTimeDelta(-1), -6);
+    } finally {
+        configHolder.CONFIG = originalConfig;
+    }
+});
+
+test("getRoundTimeDelta is 0 when round time is unset (no Foundry)", () => {
+    const configHolder = globalThis as {
+        CONFIG?: { time?: { roundTime?: number } };
+    };
+    const originalConfig = configHolder.CONFIG;
+    configHolder.CONFIG = undefined;
+    try {
+        assert.equal(getRoundTimeDelta(1), 0);
+    } finally {
+        configHolder.CONFIG = originalConfig;
+    }
+});
+
+test("advanceSide advances world time only when a round elapses (Detect Magic timer)", async () => {
+    const p1 = createCombatant({
+        id: "pc-1",
+        hasPlayerOwner: true,
+        disposition: 1,
+    });
+    const p2 = createCombatant({
+        id: "pc-2",
+        hasPlayerOwner: true,
+        disposition: 1,
+    });
+    const m1 = createCombatant({
+        id: "npc-1",
+        hasPlayerOwner: false,
+        disposition: -1,
+    });
+    const m2 = createCombatant({
+        id: "npc-2",
+        hasPlayerOwner: false,
+        disposition: -1,
+    });
+    const combat = createCombat(
+        [p1, p2, m1, m2],
+        {
+            activeSideId: "players",
+            order: ["players", "monsters"],
+            sides: {
+                players: { id: "players", combatantIds: ["pc-1", "pc-2"] },
+                monsters: { id: "monsters", combatantIds: ["npc-1", "npc-2"] },
+            },
+        },
+        [p1, m1, p2, m2],
+    );
+
+    const configHolder = globalThis as {
+        CONFIG?: { time?: { roundTime?: number } };
+    };
+    const originalConfig = configHolder.CONFIG;
+    configHolder.CONFIG = { time: { roundTime: 6 } };
+    try {
+        // players -> monsters: same round, so world time must not advance.
+        await SideInitiativeAPI.advanceSide(combat, 1);
+        assert.equal(combat.lastUpdateOptions, undefined);
+
+        // monsters -> players: the round wraps, so combat.update carries a
+        // worldTime delta (one round = 6s) so seconds-based effect durations tick.
+        await SideInitiativeAPI.advanceSide(combat, 1);
+        assert.deepEqual(combat.lastUpdateOptions, { worldTime: { delta: 6 } });
+        assert.equal(combat.round, 2);
+    } finally {
+        configHolder.CONFIG = originalConfig;
+    }
+});
+
 test("advanceSide emits side turn lifecycle hooks and setActiveSide does not re-emit them for the current side", async () => {
-    const p1 = createCombatant({ id: "pc-1", hasPlayerOwner: true, disposition: 1 });
-    const m1 = createCombatant({ id: "npc-1", hasPlayerOwner: false, disposition: -1 });
+    const p1 = createCombatant({
+        id: "pc-1",
+        hasPlayerOwner: true,
+        disposition: 1,
+    });
+    const m1 = createCombatant({
+        id: "npc-1",
+        hasPlayerOwner: false,
+        disposition: -1,
+    });
     const combat = createCombat(
         [p1, m1],
         {
@@ -449,10 +683,10 @@ test("advanceSide emits side turn lifecycle hooks and setActiveSide does not re-
             order: ["players", "monsters"],
             sides: {
                 players: { id: "players", combatantIds: ["pc-1"] },
-                monsters: { id: "monsters", combatantIds: ["npc-1"] }
-            }
+                monsters: { id: "monsters", combatantIds: ["npc-1"] },
+            },
         },
-        [p1, m1]
+        [p1, m1],
     );
 
     const events = [];
@@ -462,7 +696,7 @@ test("advanceSide emits side turn lifecycle hooks and setActiveSide does not re-
     globalThis.Hooks = {
         callAll(name, payload) {
             events.push({ name, payload });
-        }
+        },
     };
     combat.setFlag = async function setFlag(scope, key, value) {
         if (scope === "side-initiative" && key === "state") {
@@ -477,7 +711,13 @@ test("advanceSide emits side turn lifecycle hooks and setActiveSide does not re-
 
     try {
         await SideInitiativeAPI.setActiveSide(combat, "players");
-        assert.equal(events.some((event) => event.name === "side-initiative.sideTurnEnd" || event.name === "side-initiative.sideTurnStart"), false);
+        assert.equal(
+            events.some(
+                (event) =>
+                    event.name === "side-initiative.sideTurnEnd" || event.name === "side-initiative.sideTurnStart",
+            ),
+            false,
+        );
 
         events.length = 0;
         await SideInitiativeAPI.advanceSide(combat, 1);
@@ -487,16 +727,16 @@ test("advanceSide emits side turn lifecycle hooks and setActiveSide does not re-
             payload: {
                 combat,
                 sideId: "players",
-                nextSideId: "monsters"
-            }
+                nextSideId: "monsters",
+            },
         });
         assert.deepEqual(events.at(-1), {
             name: "side-initiative.sideTurnStart",
             payload: {
                 combat,
                 sideId: "monsters",
-                previousSideId: "players"
-            }
+                previousSideId: "players",
+            },
         });
         assert.ok(events.some((event) => event.name === "combat.setFlag"));
         assert.ok(events.some((event) => event.name === "combat.update"));
@@ -508,8 +748,16 @@ test("advanceSide emits side turn lifecycle hooks and setActiveSide does not re-
 });
 
 test("advanceSide awaits sideTurnEnd flushers before the turn advances (combat.update)", async () => {
-    const p1 = createCombatant({ id: "pc-1", hasPlayerOwner: true, disposition: 1 });
-    const m1 = createCombatant({ id: "npc-1", hasPlayerOwner: false, disposition: -1 });
+    const p1 = createCombatant({
+        id: "pc-1",
+        hasPlayerOwner: true,
+        disposition: 1,
+    });
+    const m1 = createCombatant({
+        id: "npc-1",
+        hasPlayerOwner: false,
+        disposition: -1,
+    });
     const combat = createCombat(
         [p1, m1],
         {
@@ -517,16 +765,20 @@ test("advanceSide awaits sideTurnEnd flushers before the turn advances (combat.u
             order: ["players", "monsters"],
             sides: {
                 players: { id: "players", combatantIds: ["pc-1"] },
-                monsters: { id: "monsters", combatantIds: ["npc-1"] }
-            }
+                monsters: { id: "monsters", combatantIds: ["npc-1"] },
+            },
         },
-        [p1, m1]
+        [p1, m1],
     );
 
     const events: string[] = [];
     const originalHooks = globalThis.Hooks;
     const originalUpdate = combat.update.bind(combat);
-    globalThis.Hooks = { callAll(name: string) { events.push(`hook:${name}`); } };
+    globalThis.Hooks = {
+        callAll(name: string) {
+            events.push(`hook:${name}`);
+        },
+    };
     combat.update = async function update(data) {
         events.push("combat.update");
         return originalUpdate(data);
@@ -577,21 +829,21 @@ test("rollWeightedSideInitiativeData computes weighted averages by side", () => 
     const result = rollWeightedSideInitiativeData(
         [
             { id: "players", combatantIds: ["pc-1", "pc-2"] },
-            { id: "monsters", combatantIds: ["lich", "goblin"] }
+            { id: "monsters", combatantIds: ["lich", "goblin"] },
         ],
         {
             "pc-1": 10,
             "pc-2": 12,
             lich: 8,
-            goblin: 18
+            goblin: 18,
         },
         {
             "pc-1": 1,
             "pc-2": 1,
             lich: 3900,
-            goblin: 50
+            goblin: 50,
         },
-        () => 0.5
+        () => 0.5,
     );
 
     assert.equal(result.rolls.find((entry) => entry.id === "players").roll, 11);
@@ -605,7 +857,7 @@ test("SideInitiativeAPI rolls and advances by side", async () => {
         createCombatant({ id: "pc-1", hasPlayerOwner: true, disposition: 1 }),
         createCombatant({ id: "pc-2", hasPlayerOwner: true, disposition: 1 }),
         createCombatant({ id: "npc-1", hasPlayerOwner: false, disposition: -1 }),
-        createCombatant({ id: "npc-2", hasPlayerOwner: false, disposition: -1 })
+        createCombatant({ id: "npc-2", hasPlayerOwner: false, disposition: -1 }),
     ];
     const combat = createCombat(combatants);
 
@@ -614,7 +866,7 @@ test("SideInitiativeAPI rolls and advances by side", async () => {
             const values = [0.9, 0.8, 0.2, 0.3, 0.1, 0.4];
             let index = 0;
             return () => values[index++ % values.length];
-        })()
+        })(),
     });
 
     assert.equal(state.order.length, 2);
@@ -633,7 +885,7 @@ test("SideInitiativeAPI rolls and advances by side", async () => {
 test("SideInitiativeAPI.rollSideInitiative creates visible roll messages", async () => {
     const combatants = [
         createCombatant({ id: "pc-1", hasPlayerOwner: true, disposition: 1 }),
-        createCombatant({ id: "npc-1", hasPlayerOwner: false, disposition: -1 })
+        createCombatant({ id: "npc-1", hasPlayerOwner: false, disposition: -1 }),
     ];
     const combat = createCombat(
         combatants,
@@ -641,10 +893,10 @@ test("SideInitiativeAPI.rollSideInitiative creates visible roll messages", async
             order: ["players", "monsters"],
             sides: {
                 players: { id: "players", combatantIds: ["pc-1"] },
-                monsters: { id: "monsters", combatantIds: ["npc-1"] }
-            }
+                monsters: { id: "monsters", combatantIds: ["npc-1"] },
+            },
         },
-        combatants
+        combatants,
     );
 
     const messages = [];
@@ -665,20 +917,20 @@ test("SideInitiativeAPI.rollSideInitiative creates visible roll messages", async
                         async toMessage(data) {
                             messages.push({ total: this.total, ...data });
                             return this;
-                        }
+                        },
                     };
-                }
-            }
+                },
+            },
         },
         documents: {
             ChatMessage: {
                 implementation: {
                     getSpeaker({ alias }) {
                         return { alias };
-                    }
-                }
-            }
-        }
+                    },
+                },
+            },
+        },
     };
     globalThis.ChatMessage = globalThis.foundry.documents.ChatMessage;
     globalThis.game = {
@@ -688,21 +940,29 @@ test("SideInitiativeAPI.rollSideInitiative creates visible roll messages", async
                 if (namespace === "side-initiative" && key === "initiativeMethod") return "side-d20";
                 if (namespace === "core" && key === "rollMode") return "publicroll";
                 return null;
-            }
+            },
         },
         i18n: {
             format(key, data) {
                 return `${key}:${data.name}`;
-            }
-        }
+            },
+        },
     };
 
     try {
-        const state = await SideInitiativeAPI.rollSideInitiative(combat, { random: () => 0.5 });
+        const state = await SideInitiativeAPI.rollSideInitiative(combat, {
+            random: () => 0.5,
+        });
 
         assert.equal(messages.length, 2);
-        assert.deepEqual(messages.map((entry) => entry.total), [17, 9]);
-        assert.deepEqual(messages.map((entry) => entry.speaker.alias), ["Players", "Monsters"]);
+        assert.deepEqual(
+            messages.map((entry) => entry.total),
+            [17, 9],
+        );
+        assert.deepEqual(
+            messages.map((entry) => entry.speaker.alias),
+            ["Players", "Monsters"],
+        );
         assert.equal(combatants[0].initiative, 17);
         assert.equal(combatants[1].initiative, 9);
         assert.equal(state.order[0], "players");
@@ -716,10 +976,36 @@ test("SideInitiativeAPI.rollSideInitiative creates visible roll messages", async
 
 test("SideInitiativeAPI.rollWeightedSideInitiative applies weighted averages to all combatants", async () => {
     const combatants = [
-        createCombatant({ id: "pc-1", hasPlayerOwner: true, disposition: 1, sideId: "players", initiativeTotal: 10 }),
-        createCombatant({ id: "pc-2", hasPlayerOwner: true, disposition: 1, sideId: "players", initiativeTotal: 12 }),
-        createCombatant({ id: "lich", hasPlayerOwner: false, disposition: -1, sideId: "monsters", actorXp: 3900, initiativeTotal: 8 }),
-        createCombatant({ id: "goblin", hasPlayerOwner: false, disposition: -1, sideId: "monsters", actorXp: 50, initiativeTotal: 18 })
+        createCombatant({
+            id: "pc-1",
+            hasPlayerOwner: true,
+            disposition: 1,
+            sideId: "players",
+            initiativeTotal: 10,
+        }),
+        createCombatant({
+            id: "pc-2",
+            hasPlayerOwner: true,
+            disposition: 1,
+            sideId: "players",
+            initiativeTotal: 12,
+        }),
+        createCombatant({
+            id: "lich",
+            hasPlayerOwner: false,
+            disposition: -1,
+            sideId: "monsters",
+            actorXp: 3900,
+            initiativeTotal: 8,
+        }),
+        createCombatant({
+            id: "goblin",
+            hasPlayerOwner: false,
+            disposition: -1,
+            sideId: "monsters",
+            actorXp: 50,
+            initiativeTotal: 18,
+        }),
     ];
     combatants[0].initiative = 10;
     combatants[1].initiative = 12;
@@ -731,13 +1017,16 @@ test("SideInitiativeAPI.rollWeightedSideInitiative applies weighted averages to 
             order: ["players", "monsters"],
             sides: {
                 players: { id: "players", combatantIds: ["pc-1", "pc-2"] },
-                monsters: { id: "monsters", combatantIds: ["lich", "goblin"] }
-            }
+                monsters: { id: "monsters", combatantIds: ["lich", "goblin"] },
+            },
         },
-        combatants
+        combatants,
     );
 
-    const state = await SideInitiativeAPI.rollWeightedSideInitiative(combat, { refresh: false, random: () => 0.25 });
+    const state = await SideInitiativeAPI.rollWeightedSideInitiative(combat, {
+        refresh: false,
+        random: () => 0.25,
+    });
 
     assert.equal(state.order[0], "players");
     assert.equal(combatants[0].initiative, 11);
@@ -751,15 +1040,15 @@ test("SideInitiativeAPI.rollWeightedSideInitiative applies weighted averages to 
 test("getNextSideId skips empty sides", () => {
     const combatants = [
         createCombatant({ id: "pc-1", hasPlayerOwner: true, disposition: 1 }),
-        createCombatant({ id: "npc-1", hasPlayerOwner: false, disposition: -1 })
+        createCombatant({ id: "npc-1", hasPlayerOwner: false, disposition: -1 }),
     ];
     const combat = createCombat(combatants, {
         activeSideId: "players",
         order: ["players", "allies", "neutral", "monsters"],
         sides: {
             players: { id: "players", combatantIds: ["pc-1"] },
-            monsters: { id: "monsters", combatantIds: ["npc-1"] }
-        }
+            monsters: { id: "monsters", combatantIds: ["npc-1"] },
+        },
     });
 
     assert.equal(getNextSideId(combat, 1), "monsters");

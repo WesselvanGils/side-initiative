@@ -6,7 +6,7 @@ import {
     isSupportedGambitsPremadesVersion,
     registerGambitsPremadesIntegration,
     resetGambitsPremadesIntegrationState,
-    validateGambitsOpportunityAttackSource
+    validateGambitsOpportunityAttackSource,
 } from "../src/integration/gambits-premades.js";
 
 function createOriginalOpportunityAttackScenarios() {
@@ -16,17 +16,17 @@ function createOriginalOpportunityAttackScenarios() {
         if (!token || !region || !regionScenario) return null;
 
         if (regionScenario === "onTurnStart") {
-            let behaviors = region.behaviors.filter(b => b.name === "onExit" || b.name === "onEnter");
-            for (let behavior of behaviors) {
-                await behavior.update({ "disabled": true });
+            const behaviors = region.behaviors.filter((b) => b.name === "onExit" || b.name === "onEnter");
+            for (const behavior of behaviors) {
+                await behavior.update({ disabled: true });
             }
             return "disabled";
         }
 
         if (regionScenario === "onTurnEnd") {
-            let behaviors = region.behaviors.filter(b => b.name === "onExit" || b.name === "onEnter");
-            for (let behavior of behaviors) {
-                await behavior.update({ "disabled": false });
+            const behaviors = region.behaviors.filter((b) => b.name === "onExit" || b.name === "onEnter");
+            for (const behavior of behaviors) {
+                await behavior.update({ disabled: false });
             }
             return "enabled";
         }
@@ -53,11 +53,11 @@ function createDoubleLookupOriginal() {
         if (!token || !region || !regionScenario) return null;
 
         if (regionScenario === "onTurnStart") {
-            let behaviors = region.behaviors.filter(b => b.name === "onExit" || b.name === "onEnter");
+            const behaviors = region.behaviors.filter((b) => b.name === "onExit" || b.name === "onEnter");
             return "disabled";
         }
 
-        let currentCombatant = canvas.tokens.get(game.combat?.current.tokenId);
+        const currentCombatant = canvas.tokens.get(game.combat?.current.tokenId);
         if (currentCombatant?.id !== token.object.id) {
             return "blocked: not tokens turn in combat";
         }
@@ -80,7 +80,7 @@ function createHooks() {
         },
         get(name) {
             return registry.get(name) ?? [];
-        }
+        },
     };
 }
 
@@ -88,14 +88,14 @@ function installGlobals({
     version = "2.1.43",
     active = true,
     supportedBySide = new Set(["active-commander", "active-member"]),
-    currentTokenId = "current-token"
+    currentTokenId = "current-token",
 } = {}) {
     const original = {
         game: globalThis.game,
         ui: globalThis.ui,
         Hooks: globalThis.Hooks,
         canvas: globalThis.canvas,
-        fromUuid: globalThis.fromUuid
+        fromUuid: globalThis.fromUuid,
     };
 
     const warnings = [];
@@ -112,7 +112,7 @@ function installGlobals({
             id,
             uuid: `${id}-uuid`,
             type: "npc",
-            name: id
+            name: id,
         };
         actors.set(actor.uuid, actor);
         return actor;
@@ -134,7 +134,7 @@ function installGlobals({
             actor,
             testInsideRegion(region) {
                 return region.tokenIds.has(id);
-            }
+            },
         };
         tokens.set(token.uuid, token);
         return token;
@@ -153,7 +153,7 @@ function installGlobals({
             getFlag(scope, key) {
                 if (scope === "side-initiative" && key === "sideId") return sideId;
                 return null;
-            }
+            },
         };
         combatants.push(combatant);
         return combatant;
@@ -177,8 +177,8 @@ await game.gps.cloudOfDaggers2024({ tokenUuid: event.data.token.uuid, regionUuid
         flags: {
             "gambits-premades": {
                 actorUuid: activeCommander.actor.uuid,
-                tokenUuid: activeCommander.uuid
-            }
+                tokenUuid: activeCommander.uuid,
+            },
         },
         behaviors: [
             {
@@ -187,12 +187,12 @@ await game.gps.cloudOfDaggers2024({ tokenUuid: event.data.token.uuid, regionUuid
                 disabled: false,
                 system: {
                     events: ["tokenMoveOut"],
-                    source: oaExitSource
+                    source: oaExitSource,
                 },
                 async update(data) {
                     behaviorUpdates.push({ behavior: "onExit", ...data });
                     return data;
-                }
+                },
             },
             {
                 type: "executeScript",
@@ -200,12 +200,12 @@ await game.gps.cloudOfDaggers2024({ tokenUuid: event.data.token.uuid, regionUuid
                 disabled: false,
                 system: {
                     events: ["tokenMoveIn"],
-                    source: oaEnterSource
+                    source: oaEnterSource,
                 },
                 async update(data) {
                     behaviorUpdates.push({ behavior: "onEnter", ...data });
                     return data;
-                }
+                },
             },
             {
                 type: "executeScript",
@@ -213,8 +213,8 @@ await game.gps.cloudOfDaggers2024({ tokenUuid: event.data.token.uuid, regionUuid
                 disabled: false,
                 system: {
                     events: ["tokenTurnStart"],
-                    source: turnStartSource
-                }
+                    source: turnStartSource,
+                },
             },
             {
                 type: "executeScript",
@@ -222,40 +222,42 @@ await game.gps.cloudOfDaggers2024({ tokenUuid: event.data.token.uuid, regionUuid
                 disabled: false,
                 system: {
                     events: ["tokenTurnEnd"],
-                    source: turnEndSource
-                }
-            }
+                    source: turnEndSource,
+                },
+            },
         ],
         getFlag(scope, key) {
             if (scope === "gambits-premades" && key === "regionDisabled") return false;
             return null;
-        }
+        },
     };
     regions.set(region.uuid, region);
 
     globalThis.game = {
         user: { id: "gm-1", isGM: true, active: true },
         users: {
-            activeGM: { id: "gm-1", isGM: true, active: true }
+            activeGM: { id: "gm-1", isGM: true, active: true },
         },
         combat: { current: { tokenId: currentTokenId }, started: true, combatants },
         modules: {
             get(moduleId) {
                 if (moduleId === "gambits-premades") {
-                    return active ? { active: true, version, data: { version } } : { active: false, version, data: { version } };
+                    return active
+                        ? { active: true, version, data: { version } }
+                        : { active: false, version, data: { version } };
                 }
                 return null;
-            }
+            },
         },
         settings: {
             get(namespace, key) {
                 return namespace === "gambits-premades" && key === "Enable Opportunity Attack";
-            }
+            },
         },
         sideInitiative: {
             isTokenOnActiveSide(token) {
                 return supportedBySide.has(token?.object?.id ?? token?.id);
-            }
+            },
         },
         gps: {
             getPrimaryGM() {
@@ -268,7 +270,7 @@ await game.gps.cloudOfDaggers2024({ tokenUuid: event.data.token.uuid, regionUuid
             cloudOfDaggers2024(payload) {
                 gpsCalls.push({ behavior: "tokenTurnEnd", ...payload });
             },
-            logInfo() {}
+            logInfo() {},
         },
         i18n: {
             localize(key) {
@@ -276,15 +278,15 @@ await game.gps.cloudOfDaggers2024({ tokenUuid: event.data.token.uuid, regionUuid
             },
             format(key, data) {
                 return `${key} ${JSON.stringify(data)}`;
-            }
-        }
+            },
+        },
     };
     globalThis.ui = {
         notifications: {
             warn(message) {
                 warnings.push(message);
-            }
-        }
+            },
+        },
     };
     globalThis.canvas = {
         scene,
@@ -292,8 +294,8 @@ await game.gps.cloudOfDaggers2024({ tokenUuid: event.data.token.uuid, regionUuid
             get(id) {
                 if (id === currentTokenId) return currentToken.object;
                 return tokens.get(`${id}-uuid`)?.object ?? null;
-            }
-        }
+            },
+        },
     };
     globalThis.fromUuid = async (uuid) => actors.get(uuid) ?? tokens.get(uuid) ?? regions.get(uuid) ?? null;
     globalThis.Hooks = createHooks();
@@ -311,7 +313,7 @@ await game.gps.cloudOfDaggers2024({ tokenUuid: event.data.token.uuid, regionUuid
             globalThis.canvas = original.canvas;
             globalThis.fromUuid = original.fromUuid;
             resetGambitsPremadesIntegrationState();
-        }
+        },
     };
 }
 
@@ -339,12 +341,12 @@ test("Gambits integration patches the active-side bypass and preserves the origi
         const activeSideResult = await game.gps.opportunityAttackScenarios({
             tokenUuid: "active-commander-uuid",
             regionUuid: "region-1",
-            regionScenario: "onExit"
+            regionScenario: "onExit",
         });
         const offSideResult = await game.gps.opportunityAttackScenarios({
             tokenUuid: "offside-token-uuid",
             regionUuid: "region-1",
-            regionScenario: "onExit"
+            regionScenario: "onExit",
         });
 
         assert.equal(activeSideResult, "allowed");
@@ -370,7 +372,7 @@ test("Gambits OA override only intercepts the turn guard, not later lookups", as
         const result = await game.gps.opportunityAttackScenarios({
             tokenUuid: "active-commander-uuid",
             regionUuid: "region-1",
-            regionScenario: "onExit"
+            regionScenario: "onExit",
         });
 
         // The turn-guard lookup resolves to the active-side mover, but the very
@@ -401,7 +403,7 @@ test("Gambits integration bridges side turn hooks to every token on the side", a
                 regionUuid: "region-1",
                 regionScenario: "tokenTurnEnd",
                 movementScenario: undefined,
-                userId: "gm-1"
+                userId: "gm-1",
             },
             {
                 behavior: "tokenTurnEnd",
@@ -409,22 +411,22 @@ test("Gambits integration bridges side turn hooks to every token on the side", a
                 regionUuid: "region-1",
                 regionScenario: "tokenTurnEnd",
                 movementScenario: undefined,
-                userId: "gm-1"
+                userId: "gm-1",
             },
             {
                 behavior: "tokenTurnStart",
                 tokenUuid: "active-commander-uuid",
                 regionUuid: "region-1",
                 regionScenario: "tokenTurnStart",
-                userId: "gm-1"
+                userId: "gm-1",
             },
             {
                 behavior: "tokenTurnStart",
                 tokenUuid: "active-member-uuid",
                 regionUuid: "region-1",
                 regionScenario: "tokenTurnStart",
-                userId: "gm-1"
-            }
+                userId: "gm-1",
+            },
         ]);
     } finally {
         env.restore();
@@ -439,13 +441,13 @@ test("Gambits integration keeps an active-side token's OA region enabled on turn
         const result = await game.gps.opportunityAttackScenarios({
             tokenUuid: "active-commander-uuid",
             regionUuid: "region-1",
-            regionScenario: "onTurnStart"
+            regionScenario: "onTurnStart",
         });
 
         assert.equal(result, "disabled");
         assert.deepEqual(env.behaviorUpdates, [
             { behavior: "onExit", disabled: true },
-            { behavior: "onEnter", disabled: true }
+            { behavior: "onEnter", disabled: true },
         ]);
     } finally {
         env.restore();
@@ -460,13 +462,13 @@ test("Gambits integration keeps an active-side token's OA region enabled on turn
         const result = await game.gps.opportunityAttackScenarios({
             tokenUuid: "active-commander-uuid",
             regionUuid: "region-1",
-            regionScenario: "onTurnEnd"
+            regionScenario: "onTurnEnd",
         });
 
         assert.equal(result, "enabled");
         assert.deepEqual(env.behaviorUpdates, [
             { behavior: "onExit", disabled: false },
-            { behavior: "onEnter", disabled: false }
+            { behavior: "onEnter", disabled: false },
         ]);
     } finally {
         env.restore();

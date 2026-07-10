@@ -8,15 +8,7 @@ import { fileURLToPath } from "node:url";
 
 const MODULE_ID = "side-initiative";
 const RELEASE_ROOT = join("dist", "release");
-const RELEASE_ENTRIES = [
-    "module.json",
-    "README.md",
-    "LICENSE",
-    "scripts",
-    "styles",
-    "lang",
-    "assets"
-];
+const RELEASE_ENTRIES = ["module.json", "README.md", "LICENSE", "scripts", "styles", "lang", "assets"];
 
 interface NormalizedTag {
     tagName: string;
@@ -45,7 +37,9 @@ function normalizeReleaseTag(tag: string): NormalizedTag {
 }
 
 function getRepositoryBaseUrl(manifestUrl: string): string {
-    const match = /^https:\/\/github\.com\/([^/]+\/[^/]+)\/releases\/latest\/download\/module\.json$/.exec(String(manifestUrl ?? ""));
+    const match = /^https:\/\/github\.com\/([^/]+\/[^/]+)\/releases\/latest\/download\/module\.json$/.exec(
+        String(manifestUrl ?? ""),
+    );
     if (!match) {
         throw new Error("module.json manifest must point to the GitHub latest download URL.");
     }
@@ -53,11 +47,14 @@ function getRepositoryBaseUrl(manifestUrl: string): string {
     return `https://github.com/${match[1]}`;
 }
 
-function buildReleaseManifest(sourceManifest: Record<string, unknown>, { tagName, version, repositoryBaseUrl }: ReleaseManifestOptions): Record<string, unknown> {
+function buildReleaseManifest(
+    sourceManifest: Record<string, unknown>,
+    { tagName, version, repositoryBaseUrl }: ReleaseManifestOptions,
+): Record<string, unknown> {
     return {
         ...sourceManifest,
         version,
-        download: `${repositoryBaseUrl}/releases/download/${tagName}/${MODULE_ID}-${tagName}.zip`
+        download: `${repositoryBaseUrl}/releases/download/${tagName}/${MODULE_ID}-${tagName}.zip`,
     };
 }
 
@@ -103,11 +100,22 @@ interface StageResult {
     repositoryBaseUrl: string;
 }
 
-async function stageReleaseBundle({ rootDir, outDir, tag }: { rootDir: string; outDir: string; tag: string }): Promise<StageResult> {
+async function stageReleaseBundle({
+    rootDir,
+    outDir,
+    tag,
+}: {
+    rootDir: string;
+    outDir: string;
+    tag: string;
+}): Promise<StageResult> {
     const { tagName, version } = normalizeReleaseTag(tag);
     const sourceManifestPath = join(rootDir, "module.json");
     const changelogPath = join(rootDir, "CHANGELOG.md");
-    const sourceManifest = JSON.parse(await readFile(sourceManifestPath, "utf-8")) as Record<string, unknown> & { id?: string; manifest?: string };
+    const sourceManifest = JSON.parse(await readFile(sourceManifestPath, "utf-8")) as Record<string, unknown> & {
+        id?: string;
+        manifest?: string;
+    };
     const changelog = await readFile(changelogPath, "utf-8");
 
     if (sourceManifest.id !== MODULE_ID) {
@@ -127,9 +135,7 @@ async function stageReleaseBundle({ rootDir, outDir, tag }: { rootDir: string; o
         try {
             await access(join(rootDir, entry), fsConstants.F_OK);
             entries.push(entry);
-        } catch {
-            continue;
-        }
+        } catch {}
     }
 
     for (const entry of entries) {
@@ -141,7 +147,7 @@ async function stageReleaseBundle({ rootDir, outDir, tag }: { rootDir: string; o
 
     const zip = spawnSync("zip", ["-qr", zipPath, MODULE_ID], {
         cwd: outDir,
-        stdio: "inherit"
+        stdio: "inherit",
     });
 
     if (zip.status !== 0) {
@@ -155,7 +161,7 @@ async function stageReleaseBundle({ rootDir, outDir, tag }: { rootDir: string; o
         releaseNotesPath: join(outDir, "release-notes.md"),
         tagName,
         version,
-        repositoryBaseUrl
+        repositoryBaseUrl,
     };
 }
 
@@ -185,5 +191,5 @@ export {
     extractChangelogReleaseNotes,
     getRepositoryBaseUrl,
     normalizeReleaseTag,
-    stageReleaseBundle
+    stageReleaseBundle,
 };

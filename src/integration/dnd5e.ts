@@ -47,8 +47,7 @@ function resolveCombat(combatant: CombatantLike | null | undefined): CombatLike 
 }
 
 function readLegact(actor: ActorLike | null | undefined): { value: number; max: number } | null {
-    const legact = (actor as { system?: { resources?: { legact?: LegactResource } } })
-        ?.system?.resources?.legact;
+    const legact = (actor as { system?: { resources?: { legact?: LegactResource } } })?.system?.resources?.legact;
     if (!legact) return null;
     const max = Number(legact.max);
     if (!Number.isFinite(max) || max <= 0) return null;
@@ -62,7 +61,7 @@ function readLegact(actor: ActorLike | null | undefined): { value: number; max: 
  */
 export function getLegendaryCombatantsToRecover(
     combat: CombatLike | null | undefined,
-    sideId: string | null | undefined
+    sideId: string | null | undefined,
 ): CombatantLike[] {
     if (!combat?.started || !sideId) return [];
     return getCombatantsForSide(combat, sideId, { includeDefeated: false }).filter((combatant) => {
@@ -79,7 +78,7 @@ export function getLegendaryCombatantsToRecover(
 export function shouldSuppressNativeRecovery(
     combatant: CombatantLike | null | undefined,
     periods: unknown,
-    guarded: boolean
+    guarded: boolean,
 ): boolean {
     if (guarded) return false;
     if (!Array.isArray(periods) || !periods.includes("turnEnd")) return false;
@@ -88,7 +87,7 @@ export function shouldSuppressNativeRecovery(
 
 async function recoverLegendaryActionsForSide(
     combat: CombatLike | null | undefined,
-    sideId: string | null | undefined
+    sideId: string | null | undefined,
 ): Promise<void> {
     const combatants = getLegendaryCombatantsToRecover(combat, sideId);
     if (!combatants.length) return;
@@ -97,8 +96,9 @@ async function recoverLegendaryActionsForSide(
     try {
         for (const combatant of combatants) {
             try {
-                await (combatant as CombatantLike & { recoverCombatUses?(periods: string[]): Promise<unknown> })
-                    .recoverCombatUses?.(["turnEnd"]);
+                await (
+                    combatant as CombatantLike & { recoverCombatUses?(periods: string[]): Promise<unknown> }
+                ).recoverCombatUses?.(["turnEnd"]);
             } catch (error) {
                 console.warn("side-initiative | Failed to recover legendary actions for", combatant?.name, error);
             }

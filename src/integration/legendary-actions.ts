@@ -4,7 +4,7 @@ import {
     getCombatantFromWorkflow,
     getCombatantSideId,
     isActorOnActiveSide,
-    isSideCombat
+    isSideCombat,
 } from "../logic.js";
 import { getSetting, hooks, isPrimaryGMClient } from "../runtime.js";
 import type { ActorLike, CombatLike, CombatantLike, WorkflowLike } from "../types.js";
@@ -51,7 +51,7 @@ const integrationState: LegendaryActionsIntegrationState = {
     status: "inactive",
     reason: null,
     registered: false,
-    warnedKeys: new Set()
+    warnedKeys: new Set(),
 };
 
 /** Per-actor count of weapon attacks made since the last opened window. */
@@ -215,8 +215,9 @@ function activitiesToArray(activities: any): any[] {
 function hasLegendaryActivity(item: any, legactValue: number): boolean {
     const activities = activitiesToArray(item?.system?.activities);
     return activities.some((activity) => {
-        const isLegendary = activity?.activation?.type === "legendary"
-            || activity?.consumption?.targets?.[0]?.target === "resources.legact.value";
+        const isLegendary =
+            activity?.activation?.type === "legendary" ||
+            activity?.consumption?.targets?.[0]?.target === "resources.legact.value";
         if (!isLegendary) return false;
         const cost = Number(activity?.activation?.value);
         return !Number.isFinite(cost) || legactValue >= cost;
@@ -264,8 +265,8 @@ export function getLegendaryActionDocuments(combat: CombatLike | null | undefine
 
         const actor = resolveActor(combatant);
         if (!actor) continue;
-        const legact = (actor as { system?: { resources?: { legact?: { value?: unknown; max?: unknown } } } })
-            ?.system?.resources?.legact;
+        const legact = (actor as { system?: { resources?: { legact?: { value?: unknown; max?: unknown } } } })?.system
+            ?.resources?.legact;
         const legactValue = Number(legact?.value);
         if (!Number.isFinite(legactValue) || legactValue <= 0) continue;
 
@@ -311,8 +312,7 @@ function validateLegendaryPromptShape(): boolean {
     const cpr = getCpr();
     const utils = cpr?.utils;
     return Boolean(
-        typeof cpr?.DialogApp?.dialog === "function"
-            && typeof utils?.workflowUtils?.completeItemUse === "function"
+        typeof cpr?.DialogApp?.dialog === "function" && typeof utils?.workflowUtils?.completeItemUse === "function",
     );
 }
 
@@ -342,9 +342,9 @@ async function presentLegendaryActionPrompt(documents: LegendaryDocumentGroup[])
         group.items.map((item) => ({
             label: `${item.name ?? ""} - ${item?.labels?.activation ?? ""}${isMultiple ? ` - ${group.actor?.name ?? ""}` : ""}`,
             name: item.id,
-            options: { image: item.img }
+            options: { image: item.img },
         })),
-        { displayAsRows: true, totalMax: 1 }
+        { displayAsRows: true, totalMax: 1 },
     ]);
 
     const title = localize("SIDE-INITIATIVE.LegendaryActionWindows.Prompt.Title", "Legendary Actions");
@@ -393,22 +393,30 @@ async function executeLegendaryAction(item: any, actor: ActorLike, utils: any): 
     const actionType = activityWithType?.type;
     const options: { targetUuids?: unknown[] } = {};
 
-    const needsTarget = (["attack", "save"].includes(actionType) || activities.some((activity) => (activity?.target?.affects?.count ?? 0) > 0))
-        && !activities.some((activity) => (activity?.target?.template?.count ?? 0) > 0);
+    const needsTarget =
+        (["attack", "save"].includes(actionType) ||
+            activities.some((activity) => (activity?.target?.affects?.count ?? 0) > 0)) &&
+        !activities.some((activity) => (activity?.target?.template?.count ?? 0) > 0);
 
     if (needsTarget) {
-        const token = typeof utils?.actorUtils?.getFirstToken === "function" ? utils.actorUtils.getFirstToken(actor) : null;
+        const token =
+            typeof utils?.actorUtils?.getFirstToken === "function" ? utils.actorUtils.getFirstToken(actor) : null;
         if (token && typeof utils?.tokenUtils?.findNearby === "function") {
             const range = item?.system?.range?.reach ?? item?.system?.range?.value ?? undefined;
             const disposition = ["attack", "save"].includes(actionType) ? "enemy" : undefined;
             const nearby = utils.tokenUtils.findNearby(token, range, disposition);
             let target: unknown;
-            if (Array.isArray(nearby) && nearby.length > 1 && typeof utils?.dialogUtils?.selectTargetDialog === "function") {
+            if (
+                Array.isArray(nearby) &&
+                nearby.length > 1 &&
+                typeof utils?.dialogUtils?.selectTargetDialog === "function"
+            ) {
                 const picked = await utils.dialogUtils.selectTargetDialog(
                     localize("SIDE-INITIATIVE.LegendaryActionWindows.Target.Title", "Choose a Target"),
-                    localize("SIDE-INITIATIVE.LegendaryActionWindows.Target.Content", "Target for legendary action: ") + `${item?.name ?? ""} - ${actor?.name ?? ""}`,
+                    localize("SIDE-INITIATIVE.LegendaryActionWindows.Target.Content", "Target for legendary action: ") +
+                        `${item?.name ?? ""} - ${actor?.name ?? ""}`,
                     nearby,
-                    { userId: game?.user?.id }
+                    { userId: game?.user?.id },
                 );
                 target = Array.isArray(picked) && picked[0] ? [picked[0]] : undefined;
             } else if (Array.isArray(nearby) && nearby.length === 1) {
@@ -437,8 +445,8 @@ async function openLegendaryWindow(combat: CombatLike | null | undefined): Promi
             "law-cpr-shape",
             localize(
                 "SIDE-INITIATIVE.Notifications.LegendaryActionWindowsUnsupportedCpr",
-                "Legendary Action Windows are disabled because the installed Chris' Premades API is not supported."
-            )
+                "Legendary Action Windows are disabled because the installed Chris' Premades API is not supported.",
+            ),
         );
         integrationState.status = "unsupported";
         integrationState.reason = "CPR API shape not supported";
@@ -474,9 +482,7 @@ async function onWorkflowComplete(workflow: WorkflowLike | null | undefined): Pr
     const combat = (game?.combat as CombatLike | null) ?? null;
     if (!combat || !isSideCombat(combat) || !combat.started) return;
 
-    const actor = workflow?.actor
-        ?? (workflow as { item?: { actor?: ActorLike } })?.item?.actor
-        ?? null;
+    const actor = workflow?.actor ?? (workflow as { item?: { actor?: ActorLike } })?.item?.actor ?? null;
     if (!actor) return;
     if (!isActorOnActiveSide(actor, combat)) return;
 
@@ -526,8 +532,8 @@ export function registerLegendaryActionsIntegration(): void {
                 "law-deps",
                 localize(
                     "SIDE-INITIATIVE.Notifications.LegendaryActionWindowsNeedsDeps",
-                    "Legendary Action Windows are enabled, but require both Chris' Premades and MidiQOL to be active."
-                )
+                    "Legendary Action Windows are enabled, but require both Chris' Premades and MidiQOL to be active.",
+                ),
             );
         }
         integrationState.status = "inactive";

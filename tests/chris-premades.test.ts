@@ -6,7 +6,7 @@ import {
     getCprPremadesVersion,
     registerChrisPremadesIntegration,
     resetCprPremadesIntegrationState,
-    validateCprShape
+    validateCprShape,
 } from "../src/integration/chris-premades.js";
 
 function createHooks() {
@@ -23,7 +23,7 @@ function createHooks() {
         },
         get(name: string) {
             return (events[name] ?? []).map((entry) => entry.fn);
-        }
+        },
     };
 }
 
@@ -52,7 +52,15 @@ interface InstallOptions {
     macros?: Record<string, unknown>;
     sideCombat?: boolean;
     cprUpdateCombat?: (...args: unknown[]) => unknown;
-    extraCombatants?: Array<{ id: string; sideId: string; tokenId: string; defeated?: boolean; regions?: Set<unknown> }>;
+    extraCombatants?: Array<{
+        id: string;
+        sideId: string;
+        tokenId: string;
+        defeated?: boolean;
+        regions?: Set<unknown>;
+        effects?: unknown[];
+        items?: unknown[];
+    }>;
 }
 
 function installGlobals(options: InstallOptions = {}) {
@@ -66,22 +74,42 @@ function installGlobals(options: InstallOptions = {}) {
         previousCombatantId = "combatant-commander",
         sideCombat = true,
         templates = [],
-        extraCombatants = []
+        extraCombatants = [],
     } = options;
 
     const original = {
         game: globalThis.game,
         ui: globalThis.ui,
         Hooks: globalThis.Hooks,
-        chrisPremades: (globalThis as { chrisPremades?: unknown }).chrisPremades
+        chrisPremades: (globalThis as { chrisPremades?: unknown }).chrisPremades,
     };
 
     const warnings: string[] = [];
-    const invocations: Array<{ macro: string; pass: string; tokenId: string; castData: { castLevel: number; saveDC: number }; name: string }> = [];
+    const invocations: Array<{
+        macro: string;
+        pass: string;
+        tokenId: string;
+        castData: { castLevel: number; saveDC: number };
+        name: string;
+    }> = [];
 
     function recorder(macro: string) {
-        const fn = async function ({ trigger }: { trigger: { token?: { id?: string }; castData: { castLevel: number; saveDC: number }; name?: string } }) {
-            invocations.push({ macro, pass: "", tokenId: trigger?.token?.id ?? "?", castData: trigger?.castData, name: trigger?.name ?? "" });
+        const fn = async ({
+            trigger,
+        }: {
+            trigger: {
+                token?: { id?: string };
+                castData: { castLevel: number; saveDC: number };
+                name?: string;
+            };
+        }) => {
+            invocations.push({
+                macro,
+                pass: "",
+                tokenId: trigger?.token?.id ?? "?",
+                castData: trigger?.castData,
+                name: trigger?.name ?? "",
+            });
         };
         Object.defineProperty(fn, "name", { value: macro });
         return fn;
@@ -91,28 +119,38 @@ function installGlobals(options: InstallOptions = {}) {
         hungerOfHadarTemplate: {
             template: [
                 { pass: "turnStart", priority: 50, macro: recorder("hunger-start") },
-                { pass: "turnEnd", priority: 50, macro: recorder("hunger-end") }
-            ]
+                { pass: "turnEnd", priority: 50, macro: recorder("hunger-end") },
+            ],
         },
         cloudkillTemplate: {
-            template: [{ pass: "turnStart", priority: 50, macro: recorder("cloudkill") }]
+            template: [{ pass: "turnStart", priority: 50, macro: recorder("cloudkill") }],
         },
         everyTurnMacro: {
-            template: [{ pass: "everyTurn", priority: 50, macro: recorder("every-turn") }]
+            template: [{ pass: "everyTurn", priority: 50, macro: recorder("every-turn") }],
         },
         wallOfFireRegion: {
-            region: [{ pass: "turnEnd", priority: 50, macro: recorder("wallfire-end") }]
+            region: [{ pass: "turnEnd", priority: 50, macro: recorder("wallfire-end") }],
         },
-        ...(options.macros ?? {})
+        ...(options.macros ?? {}),
     };
 
-    function createToken(id: string, regions: Set<unknown> = new Set()) {
+    function createToken(
+        id: string,
+        regions: Set<unknown> = new Set(),
+        actorExtras: { effects?: unknown[]; items?: unknown[] } = {},
+    ) {
         const token = {
             id,
             uuid: `${id}-uuid`,
             object: { id } as { id: string; document?: unknown },
             regions,
-            actor: { id: `${id}-actor`, uuid: `${id}-actor-uuid`, type: "character" }
+            actor: {
+                id: `${id}-actor`,
+                uuid: `${id}-actor-uuid`,
+                type: "character",
+                effects: actorExtras.effects ?? [],
+                items: actorExtras.items ?? [],
+            },
         };
         token.object.document = token;
         return token;
@@ -131,17 +169,22 @@ function installGlobals(options: InstallOptions = {}) {
             getFlag(scope: string, key: string) {
                 if (sideCombat && scope === "side-initiative" && key === "sideId") return sideId;
                 return null;
-            }
+            },
         };
     }
 
     const combatants = [
         createCombatant("combatant-commander", "players", commander),
         createCombatant("combatant-member", "players", member),
-        createCombatant("combatant-offside", "monsters", offside)
-    ] as Array<ReturnType<typeof createCombatant>> & { get?(id: string): ReturnType<typeof createCombatant> | null };
+        createCombatant("combatant-offside", "monsters", offside),
+    ] as Array<ReturnType<typeof createCombatant>> & {
+        get?(id: string): ReturnType<typeof createCombatant> | null;
+    };
     for (const extra of extraCombatants) {
-        const token = createToken(extra.tokenId, extra.regions);
+        const token = createToken(extra.tokenId, extra.regions, {
+            effects: extra.effects,
+            items: extra.items,
+        });
         combatants.push(createCombatant(extra.id, extra.sideId, token, extra.defeated ?? false));
     }
     combatants.get = (id: string) => combatants.find((combatant) => combatant.id === id) ?? null;
@@ -150,7 +193,7 @@ function installGlobals(options: InstallOptions = {}) {
         getTemplatesInToken(placeable: { id?: string }) {
             const id = placeable?.id;
             return new Set(templates.filter((template) => template.tokenIds.has(id)));
-        }
+        },
     };
 
     globalThis.game = {
@@ -158,17 +201,31 @@ function installGlobals(options: InstallOptions = {}) {
         users: { activeGM: { id: primaryGM, isGM: true, active: true } },
         combat: {
             started: true,
-            current: { tokenId: currentTokenId, combatantId: currentCombatantId, turn: 2, round: 1 },
-            previous: previousCombatantId === null && previousTokenId === null
-                ? undefined
-                : { tokenId: previousTokenId, combatantId: previousCombatantId, turn: 1, round: 1 },
-            combatants
+            current: {
+                tokenId: currentTokenId,
+                combatantId: currentCombatantId,
+                turn: 2,
+                round: 1,
+            },
+            previous:
+                previousCombatantId === null && previousTokenId === null
+                    ? undefined
+                    : {
+                          tokenId: previousTokenId,
+                          combatantId: previousCombatantId,
+                          turn: 1,
+                          round: 1,
+                      },
+            combatants,
         },
         modules: {
             get(moduleId: string) {
-                if (moduleId === "chris-premades") return cprActive ? { active: true, version, data: { version } } : { active: false, version, data: { version } };
+                if (moduleId === "chris-premades")
+                    return cprActive
+                        ? { active: true, version, data: { version } }
+                        : { active: false, version, data: { version } };
                 return null;
-            }
+            },
         },
         i18n: {
             localize(key: string) {
@@ -176,15 +233,15 @@ function installGlobals(options: InstallOptions = {}) {
             },
             format(key: string, data: unknown) {
                 return `${key} ${JSON.stringify(data)}`;
-            }
-        }
+            },
+        },
     };
     globalThis.ui = {
         notifications: {
             warn(message: string) {
                 warnings.push(message);
-            }
-        }
+            },
+        },
     };
     globalThis.Hooks = createHooks();
     if (options.cprUpdateCombat) {
@@ -192,17 +249,23 @@ function installGlobals(options: InstallOptions = {}) {
     }
     (globalThis as { chrisPremades?: unknown }).chrisPremades = {
         macros: defaultMacros,
-        utils: { templateUtils }
+        utils: { templateUtils },
     };
 
     async function emitSideTurnStart(sideId: string) {
         const [handler] = (globalThis.Hooks as ReturnType<typeof createHooks>).get("side-initiative.sideTurnStart");
-        handler?.({ combat: (globalThis.game as { combat: unknown }).combat, sideId });
+        handler?.({
+            combat: (globalThis.game as { combat: unknown }).combat,
+            sideId,
+        });
         await flushCprBridge();
     }
     async function emitSideTurnEnd(sideId: string) {
         const [handler] = (globalThis.Hooks as ReturnType<typeof createHooks>).get("side-initiative.sideTurnEnd");
-        handler?.({ combat: (globalThis.game as { combat: unknown }).combat, sideId });
+        handler?.({
+            combat: (globalThis.game as { combat: unknown }).combat,
+            sideId,
+        });
         await flushCprBridge();
     }
 
@@ -225,7 +288,7 @@ function installGlobals(options: InstallOptions = {}) {
             resetCprPremadesIntegrationState();
         },
         emitSideTurnStart,
-        emitSideTurnEnd
+        emitSideTurnEnd,
     };
 }
 
@@ -234,14 +297,37 @@ const HUNGER_FLAGS = (overrides: Record<string, unknown> = {}) => ({
         template: { name: "Hunger of Hadar" },
         macros: { template: ["hungerOfHadarTemplate"] },
         castData: { castLevel: 3, saveDC: 15 },
-        ...overrides
-    }
+        ...overrides,
+    },
 });
 
 const HUNGER_TEMPLATE = (tokenIds: string[], overrides: Record<string, unknown> = {}): TemplateFixture => ({
     id: `tpl-${tokenIds.join("-")}`,
     tokenIds: new Set(tokenIds),
-    flags: HUNGER_FLAGS(overrides)
+    flags: HUNGER_FLAGS(overrides),
+});
+
+// An actor EFFECT carrying CPR 'combat' turn macros (the Blink pattern): the
+// effect lists macro names under flags['chris-premades'].macros.combat, which CPR
+// resolves to exports at chrisPremades.macros.<name>.combat.
+const effectWithCombatMacro = (name: string, macroNames: string[], castLevel = 3, saveDC = 15) => ({
+    name,
+    flags: {
+        "chris-premades": {
+            macros: { combat: macroNames },
+            castData: { castLevel, saveDC },
+        },
+    },
+});
+
+// An actor ITEM carrying CPR 'combat' turn macros (class features, etc.).
+const itemWithCombatMacro = (name: string, macroNames: string[]) => ({
+    name,
+    flags: {
+        "chris-premades": {
+            macros: { combat: macroNames },
+        },
+    },
 });
 
 test("CPR helpers validate the API shape and read the version", () => {
@@ -255,7 +341,11 @@ test("CPR helpers validate the API shape and read the version", () => {
 });
 
 test("validateCprShape is false when the CPR API is incomplete", () => {
-    const env = installGlobals({ templateUtils: { /* no getTemplatesInToken */ } });
+    const env = installGlobals({
+        templateUtils: {
+            /* no getTemplatesInToken */
+        },
+    });
     try {
         assert.equal(validateCprShape(), false);
     } finally {
@@ -269,7 +359,10 @@ test("CPR integration registers the side-turn bridge when active", () => {
         registerChrisPremadesIntegration();
 
         assert.equal(getCprPremadesIntegrationState().status, "active");
-        assert.equal((globalThis.Hooks as ReturnType<typeof createHooks>).get("side-initiative.sideTurnStart").length, 1);
+        assert.equal(
+            (globalThis.Hooks as ReturnType<typeof createHooks>).get("side-initiative.sideTurnStart").length,
+            1,
+        );
         assert.equal((globalThis.Hooks as ReturnType<typeof createHooks>).get("side-initiative.sideTurnEnd").length, 1);
         assert.equal(env.warnings.length, 0);
     } finally {
@@ -283,7 +376,10 @@ test("CPR integration is a no-op when the module is inactive", () => {
         registerChrisPremadesIntegration();
 
         assert.equal(getCprPremadesIntegrationState().status, "inactive");
-        assert.equal((globalThis.Hooks as ReturnType<typeof createHooks>).get("side-initiative.sideTurnStart").length, 0);
+        assert.equal(
+            (globalThis.Hooks as ReturnType<typeof createHooks>).get("side-initiative.sideTurnStart").length,
+            0,
+        );
     } finally {
         env.restore();
     }
@@ -292,13 +388,16 @@ test("CPR integration is a no-op when the module is inactive", () => {
 test("CPR bridge fires turnStart for every token on the side (no skip — CPR native is suppressed)", async () => {
     const env = installGlobals({
         currentTokenId: "commander",
-        templates: [HUNGER_TEMPLATE(["commander", "member"])]
+        templates: [HUNGER_TEMPLATE(["commander", "member"])],
     });
     try {
         registerChrisPremadesIntegration();
         await env.emitSideTurnStart("players");
 
-        const invoked = env.invocations.filter((i) => i.macro === "hunger-start").map((i) => i.tokenId).sort();
+        const invoked = env.invocations
+            .filter((i) => i.macro === "hunger-start")
+            .map((i) => i.tokenId)
+            .sort();
         // No skip: the commander is fired by the bridge too (CPR native is suppressed).
         assert.deepEqual(invoked, ["commander", "member"]);
     } finally {
@@ -310,13 +409,16 @@ test("CPR bridge fires turnEnd for every token on the side", async () => {
     const env = installGlobals({
         currentTokenId: "commander",
         previousTokenId: "member",
-        templates: [HUNGER_TEMPLATE(["commander", "member"])]
+        templates: [HUNGER_TEMPLATE(["commander", "member"])],
     });
     try {
         registerChrisPremadesIntegration();
         await env.emitSideTurnEnd("players");
 
-        const invoked = env.invocations.filter((i) => i.macro === "hunger-end").map((i) => i.tokenId).sort();
+        const invoked = env.invocations
+            .filter((i) => i.macro === "hunger-end")
+            .map((i) => i.tokenId)
+            .sort();
         assert.deepEqual(invoked, ["commander", "member"]);
     } finally {
         env.restore();
@@ -326,7 +428,7 @@ test("CPR bridge fires turnEnd for every token on the side", async () => {
 test("CPR bridge is a no-op off the primary GM client", async () => {
     const env = installGlobals({
         primaryGM: "other-gm",
-        templates: [HUNGER_TEMPLATE(["commander", "member"])]
+        templates: [HUNGER_TEMPLATE(["commander", "member"])],
     });
     try {
         registerChrisPremadesIntegration();
@@ -341,7 +443,7 @@ test("CPR bridge is a no-op off the primary GM client", async () => {
 test("CPR trigger castData uses -1 sentinels when the flag is missing", async () => {
     const env = installGlobals({
         currentTokenId: "commander",
-        templates: [HUNGER_TEMPLATE(["member"], { castData: undefined })]
+        templates: [HUNGER_TEMPLATE(["member"], { castData: undefined })],
     });
     try {
         registerChrisPremadesIntegration();
@@ -357,7 +459,7 @@ test("CPR trigger castData uses -1 sentinels when the flag is missing", async ()
 test("CPR bridge passes through castData when present", async () => {
     const env = installGlobals({
         currentTokenId: "commander",
-        templates: [HUNGER_TEMPLATE(["member"], { castData: { castLevel: 5, saveDC: 17 } })]
+        templates: [HUNGER_TEMPLATE(["member"], { castData: { castLevel: 5, saveDC: 17 } })],
     });
     try {
         registerChrisPremadesIntegration();
@@ -377,14 +479,26 @@ test("CPR bridge dedupes overlapping same-name templates by max DC/level", async
             {
                 id: "cloudkill-low",
                 tokenIds: new Set(["member"]),
-                flags: { "chris-premades": { template: { name: "Cloudkill" }, macros: { template: ["cloudkillTemplate"] }, castData: { castLevel: 3, saveDC: 13 } } }
+                flags: {
+                    "chris-premades": {
+                        template: { name: "Cloudkill" },
+                        macros: { template: ["cloudkillTemplate"] },
+                        castData: { castLevel: 3, saveDC: 13 },
+                    },
+                },
             },
             {
                 id: "cloudkill-high",
                 tokenIds: new Set(["member"]),
-                flags: { "chris-premades": { template: { name: "Cloudkill" }, macros: { template: ["cloudkillTemplate"] }, castData: { castLevel: 5, saveDC: 17 } } }
-            }
-        ]
+                flags: {
+                    "chris-premades": {
+                        template: { name: "Cloudkill" },
+                        macros: { template: ["cloudkillTemplate"] },
+                        castData: { castLevel: 5, saveDC: 17 },
+                    },
+                },
+            },
+        ],
     });
     try {
         registerChrisPremadesIntegration();
@@ -402,11 +516,23 @@ test("CPR bridge fires region turnEnd macros for member tokens (Wall of Fire)", 
     const region: RegionFixture = {
         id: "region-wallfire",
         name: "Wall of Fire Region",
-        flags: { "chris-premades": { macros: { region: ["wallOfFireRegion"] }, castData: { castLevel: 4, saveDC: 16 } } }
+        flags: {
+            "chris-premades": {
+                macros: { region: ["wallOfFireRegion"] },
+                castData: { castLevel: 4, saveDC: 16 },
+            },
+        },
     };
     const env = installGlobals({
         templates: [],
-        extraCombatants: [{ id: "combatant-member-2", sideId: "players", tokenId: "member2", regions: new Set([region as unknown]) }]
+        extraCombatants: [
+            {
+                id: "combatant-member-2",
+                sideId: "players",
+                tokenId: "member2",
+                regions: new Set([region as unknown]),
+            },
+        ],
     });
     // The default `member` combatant has no region; the extra `member2` carries it.
     try {
@@ -424,7 +550,14 @@ test("CPR bridge excludes defeated combatants", async () => {
     const env = installGlobals({
         currentTokenId: "commander",
         templates: [HUNGER_TEMPLATE(["commander", "member", "downed"])],
-        extraCombatants: [{ id: "combatant-downed", sideId: "players", tokenId: "downed", defeated: true }]
+        extraCombatants: [
+            {
+                id: "combatant-downed",
+                sideId: "players",
+                tokenId: "downed",
+                defeated: true,
+            },
+        ],
     });
     try {
         registerChrisPremadesIntegration();
@@ -442,13 +575,16 @@ test("CPR bridge fires for all side tokens on turnEnd even when previous is unse
     const env = installGlobals({
         currentTokenId: "commander",
         previousTokenId: null,
-        templates: [HUNGER_TEMPLATE(["commander", "member"])]
+        templates: [HUNGER_TEMPLATE(["commander", "member"])],
     });
     try {
         registerChrisPremadesIntegration();
         await env.emitSideTurnEnd("players");
 
-        const invoked = env.invocations.filter((i) => i.macro === "hunger-end").map((i) => i.tokenId).sort();
+        const invoked = env.invocations
+            .filter((i) => i.macro === "hunger-end")
+            .map((i) => i.tokenId)
+            .sort();
         assert.deepEqual(invoked, ["commander", "member"]);
     } finally {
         env.restore();
@@ -462,15 +598,24 @@ test("CPR bridge fires everyTurn passes at side start (preserves CPR's native ev
             {
                 id: "tpl-everyturn",
                 tokenIds: new Set(["member"]),
-                flags: { "chris-premades": { template: { name: "Everyturn Thing" }, macros: { template: ["everyTurnMacro"] }, castData: { castLevel: 1, saveDC: 10 } } }
-            }
-        ]
+                flags: {
+                    "chris-premades": {
+                        template: { name: "Everyturn Thing" },
+                        macros: { template: ["everyTurnMacro"] },
+                        castData: { castLevel: 1, saveDC: 10 },
+                    },
+                },
+            },
+        ],
     });
     try {
         registerChrisPremadesIntegration();
         await env.emitSideTurnStart("players");
 
-        assert.equal(env.invocations.some((i) => i.macro === "every-turn"), true);
+        assert.equal(
+            env.invocations.some((i) => i.macro === "every-turn"),
+            true,
+        );
     } finally {
         env.restore();
     }
@@ -491,7 +636,7 @@ test("CPR updateCombat wrap suppresses within-side turn changes (commander switc
     const env = installGlobals({
         currentCombatantId: "combatant-commander",
         previousCombatantId: "combatant-member",
-        cprUpdateCombat: createFakeCprUpdateCombat(dispatches)
+        cprUpdateCombat: createFakeCprUpdateCombat(dispatches),
     });
     try {
         registerChrisPremadesIntegration();
@@ -511,7 +656,7 @@ test("CPR updateCombat wrap suppresses ALL side-combat turn changes (cross-side 
     const env = installGlobals({
         currentCombatantId: "combatant-commander",
         previousCombatantId: "combatant-offside",
-        cprUpdateCombat: createFakeCprUpdateCombat(dispatches)
+        cprUpdateCombat: createFakeCprUpdateCombat(dispatches),
     });
     try {
         registerChrisPremadesIntegration();
@@ -534,7 +679,7 @@ test("CPR updateCombat wrap never suppresses non-side-initiative combats", async
         sideCombat: false,
         currentCombatantId: "combatant-commander",
         previousCombatantId: "combatant-member",
-        cprUpdateCombat: createFakeCprUpdateCombat(dispatches)
+        cprUpdateCombat: createFakeCprUpdateCombat(dispatches),
     });
     try {
         registerChrisPremadesIntegration();
@@ -574,14 +719,24 @@ test("CPR bridge awaits each workflow before the next so slow macros never inter
         log.push(`end ${trigger.token?.id}`);
     };
     const env = installGlobals({
-        macros: { slowTemplate: { template: [{ pass: "turnStart", priority: 50, macro: slow }] } },
+        macros: {
+            slowTemplate: {
+                template: [{ pass: "turnStart", priority: 50, macro: slow }],
+            },
+        },
         templates: [
             {
                 id: "tpl-slow",
                 tokenIds: new Set(["commander", "member"]),
-                flags: { "chris-premades": { template: { name: "Slow" }, macros: { template: ["slowTemplate"] }, castData: { castLevel: 1, saveDC: 10 } } }
-            }
-        ]
+                flags: {
+                    "chris-premades": {
+                        template: { name: "Slow" },
+                        macros: { template: ["slowTemplate"] },
+                        castData: { castLevel: 1, saveDC: 10 },
+                    },
+                },
+            },
+        ],
     });
     try {
         registerChrisPremadesIntegration();
@@ -596,12 +751,17 @@ test("CPR bridge awaits each workflow before the next so slow macros never inter
 });
 
 test("CPR bridge flushCprBridge drains the serialized turnEnd queue", async () => {
-    const env = installGlobals({ templates: [HUNGER_TEMPLATE(["commander", "member"])] });
+    const env = installGlobals({
+        templates: [HUNGER_TEMPLATE(["commander", "member"])],
+    });
     try {
         registerChrisPremadesIntegration();
         await env.emitSideTurnEnd("players");
         // After awaiting, every turnEnd macro for the side has run.
-        const invoked = env.invocations.filter((i) => i.macro === "hunger-end").map((i) => i.tokenId).sort();
+        const invoked = env.invocations
+            .filter((i) => i.macro === "hunger-end")
+            .map((i) => i.tokenId)
+            .sort();
         assert.deepEqual(invoked, ["commander", "member"]);
     } finally {
         env.restore();
@@ -628,11 +788,16 @@ function installCombatUtilsEnv(options: CombatUtilsEnvOptions = {}) {
         ui: globalThis.ui,
         Hooks: globalThis.Hooks,
         canvas: (globalThis as { canvas?: unknown }).canvas,
-        chrisPremades: (globalThis as { chrisPremades?: unknown }).chrisPremades
+        chrisPremades: (globalThis as { chrisPremades?: unknown }).chrisPremades,
     };
 
     const origIsOwnTurnCalls: unknown[] = [];
-    const origPerTurnCheckCalls: Array<{ entity: unknown; name: unknown; ownTurnOnly: unknown; tokenId: unknown }> = [];
+    const origPerTurnCheckCalls: Array<{
+        entity: unknown;
+        name: unknown;
+        ownTurnOnly: unknown;
+        tokenId: unknown;
+    }> = [];
     const origGetCurrentCalls: number[] = [];
 
     function makeCombatant(id: string, sideId: string) {
@@ -643,7 +808,7 @@ function installCombatUtilsEnv(options: CombatUtilsEnvOptions = {}) {
             getFlag(scope: string, key: string) {
                 if (sideCombat && scope === "side-initiative" && key === "sideId") return sideId;
                 return null;
-            }
+            },
         };
     }
 
@@ -653,7 +818,12 @@ function installCombatUtilsEnv(options: CombatUtilsEnvOptions = {}) {
 
     function makeToken(id: string, combatant: ReturnType<typeof makeCombatant>) {
         // Placeable-like; isTokenOnActiveSide resolves the combatant via token.combatant.
-        return { id, uuid: `${id}-uuid`, document: { id, uuid: `${id}-uuid` }, combatant };
+        return {
+            id,
+            uuid: `${id}-uuid`,
+            document: { id, uuid: `${id}-uuid` },
+            combatant,
+        };
     }
     const commanderToken = makeToken("commander", commander);
     const memberToken = makeToken("member", member);
@@ -662,8 +832,14 @@ function installCombatUtilsEnv(options: CombatUtilsEnvOptions = {}) {
     member.token = memberToken;
     offside.token = offsideToken;
 
-    const tokenById: Record<string, unknown> = { commander: commanderToken, member: memberToken, offside: offsideToken };
-    const combatants = [commander, member, offside] as Array<ReturnType<typeof makeCombatant>> & { get?(id: string): ReturnType<typeof makeCombatant> | null };
+    const tokenById: Record<string, unknown> = {
+        commander: commanderToken,
+        member: memberToken,
+        offside: offsideToken,
+    };
+    const combatants = [commander, member, offside] as Array<ReturnType<typeof makeCombatant>> & {
+        get?(id: string): ReturnType<typeof makeCombatant> | null;
+    };
     combatants.get = (id: string) => combatants.find((c) => c.id === id) ?? null;
 
     const combat = {
@@ -671,7 +847,12 @@ function installCombatUtilsEnv(options: CombatUtilsEnvOptions = {}) {
         started,
         round: 1,
         turn: 0,
-        current: { tokenId: "commander", combatantId: "c-commander", turn: 0, round: 1 },
+        current: {
+            tokenId: "commander",
+            combatantId: "c-commander",
+            turn: 0,
+            round: 1,
+        },
         combatants,
         getFlag(scope: string, key: string) {
             if (sideCombat && scope === "side-initiative" && key === "state") {
@@ -684,11 +865,11 @@ function installCombatUtilsEnv(options: CombatUtilsEnvOptions = {}) {
                     activeSideId,
                     activeSideIndex: 0,
                     activeCombatantId: "c-commander",
-                    commanderIds: { players: "c-commander", monsters: "c-offside" }
+                    commanderIds: { players: "c-commander", monsters: "c-offside" },
                 };
             }
             return null;
-        }
+        },
     };
 
     const combatUtils = {
@@ -703,7 +884,7 @@ function installCombatUtilsEnv(options: CombatUtilsEnvOptions = {}) {
         getCurrentCombatantToken() {
             origGetCurrentCalls.push(origGetCurrentCalls.length);
             return commanderToken;
-        }
+        },
     };
 
     globalThis.game = {
@@ -711,16 +892,29 @@ function installCombatUtilsEnv(options: CombatUtilsEnvOptions = {}) {
         combat,
         modules: {
             get(id: string) {
-                return id === "chris-premades" ? { active: true, version: "1.3.53", data: { version: "1.3.53" } } : null;
-            }
-        }
+                return id === "chris-premades"
+                    ? { active: true, version: "1.3.53", data: { version: "1.3.53" } }
+                    : null;
+            },
+        },
     } as unknown as typeof globalThis.game;
-    globalThis.ui = { notifications: { warn() { /* noop */ } } } as unknown as typeof globalThis.ui;
+    globalThis.ui = {
+        notifications: {
+            warn() {
+                /* noop */
+            },
+        },
+    } as unknown as typeof globalThis.ui;
     globalThis.Hooks = createHooks() as unknown as typeof globalThis.Hooks;
-    (globalThis as { canvas?: unknown }).canvas = { tokens: { get: (id: string) => tokenById[id] ?? null } };
+    (globalThis as { canvas?: unknown }).canvas = {
+        tokens: { get: (id: string) => tokenById[id] ?? null },
+    };
     (globalThis as { chrisPremades?: unknown }).chrisPremades = {
         macros: {},
-        utils: { templateUtils: { getTemplatesInToken: () => new Set() }, combatUtils }
+        utils: {
+            templateUtils: { getTemplatesInToken: () => new Set() },
+            combatUtils,
+        },
     };
 
     function emitHook(name: string, ...args: unknown[]) {
@@ -744,7 +938,7 @@ function installCombatUtilsEnv(options: CombatUtilsEnvOptions = {}) {
             (globalThis as { canvas?: unknown }).canvas = original.canvas;
             (globalThis as { chrisPremades?: unknown }).chrisPremades = original.chrisPremades;
             resetCprPremadesIntegrationState();
-        }
+        },
     };
 }
 
@@ -827,7 +1021,10 @@ test("combatUtils.getCurrentCombatantToken answers with the tracked acting workf
         assert.equal(env.origGetCurrentCalls.length, 1);
 
         // A non-commander attack starts a workflow → the attacker's token is tracked.
-        env.emitHook("midi-qol.preAttackRoll", { id: "wf-member", token: env.memberToken });
+        env.emitHook("midi-qol.preAttackRoll", {
+            id: "wf-member",
+            token: env.memberToken,
+        });
         assert.equal(env.combatUtils.getCurrentCombatantToken(), env.memberToken);
         // Divine Smite's `!= workflow.token` gate now passes for the member.
         assert.equal(env.origGetCurrentCalls.length, 1);
@@ -840,7 +1037,10 @@ test("combatUtils.getCurrentCombatantToken stops tracking once the workflow comp
     const env = installCombatUtilsEnv();
     try {
         registerChrisPremadesIntegration();
-        env.emitHook("midi-qol.preAttackRoll", { id: "wf-member", token: env.memberToken });
+        env.emitHook("midi-qol.preAttackRoll", {
+            id: "wf-member",
+            token: env.memberToken,
+        });
 
         env.emitHook("midi-qol.RollComplete", { id: "wf-member" });
 
@@ -858,7 +1058,10 @@ test("combatUtils.getCurrentCombatantToken does not return an off-side tracked t
         registerChrisPremadesIntegration();
         // An off-side workflow (e.g. a reaction on the opposing side) must not be
         // mistaken for the active turn-taker.
-        env.emitHook("midi-qol.preAttackRoll", { id: "wf-offside", token: env.offsideToken });
+        env.emitHook("midi-qol.preAttackRoll", {
+            id: "wf-offside",
+            token: env.offsideToken,
+        });
         assert.equal(env.combatUtils.getCurrentCombatantToken(), env.commanderToken);
     } finally {
         env.restore();
@@ -876,6 +1079,131 @@ test("combatUtils wrap is idempotent across repeated registration", () => {
         // Second registration must not re-wrap (which would capture the wrapped fn
         // as the "original" and recurse on the non-side path).
         assert.equal(afterFirst, afterSecond);
+    } finally {
+        env.restore();
+    }
+});
+
+test("CPR bridge fires an effect's combat turnEnd macro (Blink) for the side's token", async () => {
+    const fired: Array<{ macro: string; tokenId: string }> = [];
+    const blinkEnd = async ({ trigger }: { trigger: { token?: { id?: string } } }) => {
+        fired.push({ macro: "blink-turnEnd", tokenId: trigger?.token?.id ?? "?" });
+    };
+    Object.defineProperty(blinkEnd, "name", { value: "blink-turnEnd" });
+    const env = installGlobals({
+        macros: {
+            blinkBlinking: {
+                combat: [{ pass: "turnEnd", priority: 50, macro: blinkEnd }],
+            },
+        },
+        extraCombatants: [
+            {
+                id: "combatant-blinker",
+                sideId: "players",
+                tokenId: "blinker",
+                effects: [effectWithCombatMacro("Blink: Blinking", ["blinkBlinking"])],
+            },
+        ],
+    });
+    try {
+        registerChrisPremadesIntegration();
+        await env.emitSideTurnEnd("players");
+
+        assert.deepEqual(fired, [{ macro: "blink-turnEnd", tokenId: "blinker" }]);
+    } finally {
+        env.restore();
+    }
+});
+
+test("CPR bridge fires an effect's combat turnStart macro (Blink: Blinked Away) at side start", async () => {
+    const fired: string[] = [];
+    const blinkStart = async () => {
+        fired.push("blink-turnStart");
+    };
+    Object.defineProperty(blinkStart, "name", { value: "blink-turnStart" });
+    const env = installGlobals({
+        macros: {
+            blinkBlinkedAway: {
+                combat: [{ pass: "turnStart", priority: 50, macro: blinkStart }],
+            },
+        },
+        extraCombatants: [
+            {
+                id: "combatant-blinker",
+                sideId: "players",
+                tokenId: "blinker",
+                effects: [effectWithCombatMacro("Blink: Blinked Away", ["blinkBlinkedAway"])],
+            },
+        ],
+    });
+    try {
+        registerChrisPremadesIntegration();
+        await env.emitSideTurnStart("players");
+
+        assert.deepEqual(fired, ["blink-turnStart"]);
+    } finally {
+        env.restore();
+    }
+});
+
+test("CPR bridge fires an item's combat macro (covers the actor items path)", async () => {
+    const fired: string[] = [];
+    const hasteStart = async () => {
+        fired.push("haste-turnStart");
+    };
+    Object.defineProperty(hasteStart, "name", { value: "haste-turnStart" });
+    const env = installGlobals({
+        macros: {
+            hasteFeature: {
+                combat: [{ pass: "turnStart", priority: 50, macro: hasteStart }],
+            },
+        },
+        extraCombatants: [
+            {
+                id: "combatant-haster",
+                sideId: "players",
+                tokenId: "haster",
+                items: [itemWithCombatMacro("Haste Feature", ["hasteFeature"])],
+            },
+        ],
+    });
+    try {
+        registerChrisPremadesIntegration();
+        await env.emitSideTurnStart("players");
+
+        assert.deepEqual(fired, ["haste-turnStart"]);
+    } finally {
+        env.restore();
+    }
+});
+
+test("CPR bridge does not fire an effect's combat macro for an off-side combatant", async () => {
+    const fired: string[] = [];
+    const blinkEnd = async () => {
+        fired.push("blink-turnEnd");
+    };
+    Object.defineProperty(blinkEnd, "name", { value: "blink-turnEnd" });
+    const env = installGlobals({
+        macros: {
+            blinkBlinking: {
+                combat: [{ pass: "turnEnd", priority: 50, macro: blinkEnd }],
+            },
+        },
+        extraCombatants: [
+            {
+                id: "combatant-enemy-blinker",
+                sideId: "monsters",
+                tokenId: "enemyblinker",
+                effects: [effectWithCombatMacro("Blink: Blinking", ["blinkBlinking"])],
+            },
+        ],
+    });
+    try {
+        registerChrisPremadesIntegration();
+        // Advancing the PLAYERS side must not trigger the monsters-side Blink effect.
+        await env.emitSideTurnEnd("players");
+
+        assert.deepEqual(fired, []);
     } finally {
         env.restore();
     }

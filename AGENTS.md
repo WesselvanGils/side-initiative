@@ -43,6 +43,10 @@ npm test             # node --import tsx --test tests/*.test.ts  (no Foundry nee
 npm run typecheck    # tsc --noEmit
 npm run build        # tsc src/ -> scripts/   (one-shot)
 npm run build:watch  # recompile on save
+npm run format        # biome format --write .   (4-space indent, write-in-place)
+npm run format:check  # biome format .            (CI / verify only)
+npm run lint          # biome lint .
+npm run check:fix     # biome check --write .     (lint + format in one pass)
 npm run changelog    # git-cliff -o CHANGELOG.md   (requires git-cliff installed)
 npm run release:build -- vX.Y.Z   # build dist/release bundle + zip (local preview of CI)
 ```
@@ -61,8 +65,11 @@ npm run createSymlinks   # symlinks the repo into <dataPath>/Data/modules/side-i
 - **Node version:** CI (`.github/workflows/release.yml`) uses Node 24;
   `.tool-versions` pins `nodejs lts`. Verify your local version matches if a
   build behaves oddly.
-- **No lint/format step is configured** (no ESLint/Prettier/Biome/.editorconfig
-  in the repo). See *Coding conventions* for how to stay consistent without one.
+- **Formatting/linting is handled by [Biome](biome.json).** Indentation is
+  **4 spaces**; run `npm run format` to fix style or `npm run format:check` to
+  verify (the formatter is scoped to `src/`, `tests/`, `tools/` and respects
+  `.gitignore`, so generated/reference trees are never touched). See
+  *Coding conventions*.
 
 ## 3. Architecture notes
 
@@ -137,10 +144,10 @@ module.ts                 Entry point. Hooks.once("init"/"ready") wires everythi
   structural interfaces in `types.ts` rather than importing concrete Foundry
   document types. Deeply nested/system-specific trees are intentionally typed
   `unknown`/`any` (documented at the top of `types.ts`).
-- **Indentation is not enforced** (no formatter). The tree is mixed: files like
-  `module.ts`, `api.ts`, `logic.ts`, `controller/*`, `integration/*` use **tabs**,
-  while `constants.ts`, `types.ts`, and `tests/*.test.ts` use **4 spaces**.
-  Match the style of the file you are editing.
+- **Indentation is enforced at 4 spaces by [Biome](biome.json)** (`npm run
+  format`). Do not introduce tabs. The whole tree (`src/`, `tests/`, `tools/`) is
+  normalized to 4-space indentation; run `npm run format` before committing if
+  your editor uses a different default.
 - **i18n:** all user-facing strings go through `SIDE-INITIATIVE.*` keys in
   `lang/en.json`. Settings register localization *keys*, never literal text
   (see `registerSettings` in `module.ts`). Add the key to `en.json` whenever you
@@ -170,6 +177,8 @@ module.ts                 Entry point. Hooks.once("init"/"ready") wires everythi
      behavior (tests stub `globalThis.game`/`Hooks`/`foundry` with plain
      objects — follow `tests/logic.test.ts`).
    - `npm run build` — must succeed and update `scripts/`.
+   - `npm run format:check` — must pass (4-space indentation via Biome); run
+     `npm run format` to auto-fix.
 5. **Update `lang/en.json`** for any new user-facing string or setting.
 6. **Keep changes minimal and focused.** Prefer targeted edits; reuse existing
    constants and accessor helpers instead of introducing new ones.
@@ -208,6 +217,8 @@ Before considering work done, confirm:
 - [ ] `npm run typecheck` passes.
 - [ ] `npm test` passes (and new pure-logic behavior has a test).
 - [ ] `npm run build` succeeds and `scripts/` is regenerated.
+- [ ] `npm run format:check` passes (4-space indentation via Biome; run
+      `npm run format` to fix).
 - [ ] Only `src/` (plus `lang/`, `styles/`, `assets/` as appropriate) was
       edited — never `scripts/`, `libs/`, or `foundry/`.
 - [ ] Any new user-facing string or setting has a `SIDE-INITIATIVE.*` key in

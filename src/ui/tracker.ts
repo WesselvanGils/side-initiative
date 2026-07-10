@@ -1,5 +1,11 @@
 import { SETTINGS } from "../constants.js";
-import { getActiveSideId, getCombatantSideId, getSideRepresentativeCombatant, getSideSummary, normalizeSideId } from "../logic.js";
+import {
+    getActiveSideId,
+    getCombatantSideId,
+    getSideRepresentativeCombatant,
+    getSideSummary,
+    normalizeSideId,
+} from "../logic.js";
 import { getSideInitiative, getSetting } from "../runtime.js";
 import type { CombatLike, CombatantLike, SideData } from "../types.js";
 import { openSideEditor } from "./side-editor.js";
@@ -33,7 +39,10 @@ function iconButton(label: string, icon: string, dataset: Record<string, string 
     return `<button type="button" class="control" ${attrs} aria-label="${label}" title="${label}"><i class="${icon}"></i></button>`;
 }
 
-function renderSideChip(side: { id: string; name: string; color?: string | null }, currentSideId: string | null): string {
+function renderSideChip(
+    side: { id: string; name: string; color?: string | null },
+    currentSideId: string | null,
+): string {
     const active = normalizeSideId(side.id) === normalizeSideId(currentSideId);
     const colorStyle = side.color ? `style="--side-chip-color:${side.color};"` : "";
     return `
@@ -46,7 +55,7 @@ function renderSideChip(side: { id: string; name: string; color?: string | null 
 function resolveDisplaySide(
     combat: CombatLike | null,
     combatant: CombatantLike | null | undefined,
-    groupId: string | null = null
+    groupId: string | null = null,
 ): (SideData & { combatantIds: string[] }) | null {
     const sides = getSideSummary(combat);
     const sideById = new Map(sides.map((side) => [side.id, side]));
@@ -55,11 +64,15 @@ function resolveDisplaySide(
     if (groupId && combat?.groups?.get) {
         const group = combat.groups.get(groupId);
         if (group?.members) {
-            const groupMembers = group.members instanceof Set ? Array.from(group.members) : Array.from(group.members as CombatantLike[]);
+            const groupMembers =
+                group.members instanceof Set ? Array.from(group.members) : Array.from(group.members as CombatantLike[]);
             members.push(...groupMembers);
         }
     } else if (combatant?.group?.members) {
-        const groupMembers = combatant.group.members instanceof Set ? Array.from(combatant.group.members) : Array.from(combatant.group.members as CombatantLike[]);
+        const groupMembers =
+            combatant.group.members instanceof Set
+                ? Array.from(combatant.group.members)
+                : Array.from(combatant.group.members as CombatantLike[]);
         members.push(...groupMembers);
     }
 
@@ -98,7 +111,10 @@ function injectSideStrip(row: HTMLElement, side: { id: string; name: string; col
     row.prepend(strip);
 }
 
-function getCombatantForRow(app: TrackerApp | null | undefined, row: HTMLElement | null | undefined): CombatantLike | null {
+function getCombatantForRow(
+    app: TrackerApp | null | undefined,
+    row: HTMLElement | null | undefined,
+): CombatantLike | null {
     const combatantId = row?.dataset?.combatantId;
     if (combatantId) {
         const viewed = app?.viewed?.combatants;
@@ -116,13 +132,21 @@ function getCombatantForRow(app: TrackerApp | null | undefined, row: HTMLElement
     if (!groupId) return null;
     const viewedGroups = app?.viewed?.groups;
     const combatGroups = app?.combat?.groups;
-    const group = (viewedGroups?.get?.(groupId) ?? combatGroups?.get?.(groupId)) ?? null;
-    const members = group?.members ? (group.members instanceof Set ? Array.from(group.members) : Array.from(group.members as CombatantLike[])) : [];
+    const group = viewedGroups?.get?.(groupId) ?? combatGroups?.get?.(groupId) ?? null;
+    const members = group?.members
+        ? group.members instanceof Set
+            ? Array.from(group.members)
+            : Array.from(group.members as CombatantLike[])
+        : [];
     if (!members.length) return null;
     return members[0] ?? null;
 }
 
-function createCommanderControl(app: TrackerApp, combat: CombatLike, combatant: CombatantLike): HTMLButtonElement | null {
+function createCommanderControl(
+    app: TrackerApp,
+    combat: CombatLike,
+    combatant: CombatantLike,
+): HTMLButtonElement | null {
     if (!globalThis.document?.createElement) return null;
 
     const button = document.createElement("button");
@@ -131,7 +155,8 @@ function createCommanderControl(app: TrackerApp, combat: CombatLike, combatant: 
     const isCommander = Boolean(sideId && getSideRepresentativeCombatant(combat, sideId)?.id === combatant.id);
 
     button.type = "button";
-    button.className = "control inline-control combatant-control icon fa-solid fa-crown side-initiative-commander-control";
+    button.className =
+        "control inline-control combatant-control icon fa-solid fa-crown side-initiative-commander-control";
     button.title = label;
     button.setAttribute("aria-label", label);
     button.setAttribute("data-tooltip", label);
@@ -196,7 +221,7 @@ export function addCombatantContextOptions(app: TrackerApp, menuItems: ContextMe
             if (requested && game?.user?.isGM) {
                 app.render?.();
             }
-        }
+        },
     });
 }
 
@@ -206,7 +231,8 @@ export function renderCombatTracker(app: TrackerApp, html: unknown): void {
     if (!combat || !root) return;
 
     const canViewTrackerControls = Boolean(game?.user?.isGM || game?.user?.can?.("COMBAT_TRACKER" as never));
-    const showTrackerControls = canViewTrackerControls && Boolean(getSetting("side-initiative", SETTINGS.showTrackerControls));
+    const showTrackerControls =
+        canViewTrackerControls && Boolean(getSetting("side-initiative", SETTINGS.showTrackerControls));
 
     root.querySelector(".side-initiative-panel")?.remove();
 

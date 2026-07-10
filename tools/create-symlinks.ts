@@ -29,14 +29,12 @@ async function main(): Promise<void> {
     if (!dataPath) {
         console.log("No 'dataPath' set in foundry-config.yaml; skipping module symlink.");
         console.log("Add your Foundry user data directory (the one containing Data/), e.g.:");
-        console.log("  dataPath: \"/path/to/FoundryVTT\"");
+        console.log('  dataPath: "/path/to/FoundryVTT"');
         return;
     }
 
     // Support both the user data root (containing Data/) and the Data dir itself.
-    const dataDir = fs.existsSync(path.join(dataPath, "Data", "modules"))
-        ? path.join(dataPath, "Data")
-        : dataPath;
+    const dataDir = fs.existsSync(path.join(dataPath, "Data", "modules")) ? path.join(dataPath, "Data") : dataPath;
     const modulesDir = path.join(dataDir, "modules");
     const linkPath = path.join(modulesDir, MODULE_ID);
 

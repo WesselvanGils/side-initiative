@@ -6,7 +6,7 @@ import {
     getLegendaryActionDocuments,
     getLegendaryActionsIntegrationState,
     registerLegendaryActionsIntegration,
-    resetLegendaryActionsIntegrationState
+    resetLegendaryActionsIntegrationState,
 } from "../src/integration/legendary-actions.js";
 
 /* ------------------------------------------------------------------ */
@@ -14,15 +14,32 @@ import {
 /* ------------------------------------------------------------------ */
 
 function slug(value: string): string {
-    return value.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
+    return value
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, "-")
+        .replace(/^-+|-+$/g, "");
 }
 
 function featureItem(name: string): any {
     return { id: `feat-${slug(name)}`, name, type: "feat", system: { identifier: slug(name) } };
 }
 
-function legendaryItem(overrides: { id?: string; activityType?: string; activationType?: string; cost?: number; targetCount?: number } = {}): any {
-    const { id = "leg-1", activityType = "attack", activationType = "legendary", cost = 1, targetCount = 1 } = overrides;
+function legendaryItem(
+    overrides: {
+        id?: string;
+        activityType?: string;
+        activationType?: string;
+        cost?: number;
+        targetCount?: number;
+    } = {},
+): any {
+    const {
+        id = "leg-1",
+        activityType = "attack",
+        activationType = "legendary",
+        cost = 1,
+        targetCount = 1,
+    } = overrides;
     return {
         id,
         name: "Legendary Swipe",
@@ -36,10 +53,10 @@ function legendaryItem(overrides: { id?: string; activityType?: string; activati
                     type: activityType,
                     activation: { type: activationType, value: cost },
                     consumption: { targets: [{ target: "resources.legact.value" }] },
-                    target: { affects: { count: targetCount }, template: { count: 0 } }
-                }
-            ]
-        }
+                    target: { affects: { count: targetCount }, template: { count: 0 } },
+                },
+            ],
+        },
     };
 }
 
@@ -59,8 +76,8 @@ function makeActor({ id, uuid, items = [], legact = null, combatant = null }: Ma
         items,
         combatant,
         system: {
-            resources: legact == null ? {} : { legact: { value: legact, max: legact } }
-        }
+            resources: legact == null ? {} : { legact: { value: legact, max: legact } },
+        },
     };
     if (combatant) combatant.actor = actor;
     return actor;
@@ -82,12 +99,18 @@ function makeCombatant({ id, sideId, actor = null, defeated = false }: MakeComba
         getFlag(scope: string, key: string) {
             if (scope === "side-initiative" && key === "sideId") return sideId;
             return null;
-        }
+        },
     };
 }
 
 function makeCombat(combatants: any[], activeSideId: string, started = true): any {
-    const sideIds = [...new Set(combatants.map((c) => c && typeof c.getFlag === "function" ? c.getFlag("side-initiative", "sideId") : null).filter(Boolean))];
+    const sideIds = [
+        ...new Set(
+            combatants
+                .map((c) => (c && typeof c.getFlag === "function" ? c.getFlag("side-initiative", "sideId") : null))
+                .filter(Boolean),
+        ),
+    ];
     return {
         id: "combat-1",
         round: 1,
@@ -99,19 +122,29 @@ function makeCombat(combatants: any[], activeSideId: string, started = true): an
                     activeSideId,
                     order: sideIds,
                     sides: {},
-                    commanderIds: {}
+                    commanderIds: {},
                 };
             }
             return null;
-        }
+        },
     };
 }
 
-function makeWorkflow({ actor, activationType = "action", activityType = "attack", item }: { actor: any; activationType?: string; activityType?: string; item?: any }): any {
+function makeWorkflow({
+    actor,
+    activationType = "action",
+    activityType = "attack",
+    item,
+}: {
+    actor: any;
+    activationType?: string;
+    activityType?: string;
+    item?: any;
+}): any {
     return {
         actor,
         item: item ?? (undefined as any),
-        activity: { activation: { type: activationType }, type: activityType }
+        activity: { activation: { type: activationType }, type: activityType },
     };
 }
 
@@ -129,11 +162,15 @@ function createHooks() {
         on(name: string, handler: (...args: unknown[]) => unknown) {
             (registry.get(name) ?? registry.set(name, []).get(name)!).push(handler);
         },
-        once() { /* not used */ },
-        callAll() { /* not used */ },
+        once() {
+            /* not used */
+        },
+        callAll() {
+            /* not used */
+        },
         get(name: string) {
             return registry.get(name) ?? [];
-        }
+        },
     };
 }
 
@@ -155,14 +192,14 @@ function installGlobals(options: InstallOptions = {}): InstalledEnv {
         settingOn = true,
         cprActive = true,
         midiActive = true,
-        dialogResult = { buttons: false }
+        dialogResult = { buttons: false },
     } = options;
 
     const original = {
         game: globalThis.game,
         ui: globalThis.ui,
         Hooks: globalThis.Hooks,
-        chrisPremades: (globalThis as { chrisPremades?: unknown }).chrisPremades
+        chrisPremades: (globalThis as { chrisPremades?: unknown }).chrisPremades,
     };
 
     const hooks = createHooks();
@@ -173,23 +210,35 @@ function installGlobals(options: InstallOptions = {}): InstalledEnv {
     const chrisPremades: any = {
         DialogApp: cprShape
             ? {
-                async dialog(title: string, content: string, inputs: unknown, buttons: unknown) {
-                    dialogCalls.push({ title, content, inputs, buttons });
-                    return await Promise.resolve(dialogResult);
-                }
-            }
+                  async dialog(title: string, content: string, inputs: unknown, buttons: unknown) {
+                      dialogCalls.push({ title, content, inputs, buttons });
+                      return await Promise.resolve(dialogResult);
+                  },
+              }
             : {},
         utils: {
             workflowUtils: {
                 async completeItemUse(item: unknown, opts: unknown, midiOpts: unknown) {
                     completeItemUseCalls.push({ item, opts, midiOpts });
-                }
+                },
             },
-            dialogUtils: { async selectTargetDialog() { return []; } },
-            tokenUtils: { findNearby() { return []; } },
-            actorUtils: { getFirstToken() { return null; } },
-            genericUtils: {}
-        }
+            dialogUtils: {
+                async selectTargetDialog() {
+                    return [];
+                },
+            },
+            tokenUtils: {
+                findNearby() {
+                    return [];
+                },
+            },
+            actorUtils: {
+                getFirstToken() {
+                    return null;
+                },
+            },
+            genericUtils: {},
+        },
     };
 
     globalThis.Hooks = hooks as unknown as typeof Hooks;
@@ -197,21 +246,24 @@ function installGlobals(options: InstallOptions = {}): InstalledEnv {
     globalThis.game = {
         combat: combat,
         user: { id: primaryGM ? "gm-1" : "other", isGM: true },
-        users: { activeGM: { id: "gm-1", isGM: true, active: true }, contents: [{ id: "gm-1", isGM: true, active: true }] },
+        users: {
+            activeGM: { id: "gm-1", isGM: true, active: true },
+            contents: [{ id: "gm-1", isGM: true, active: true }],
+        },
         i18n: { localize: (key: string) => key },
         modules: {
             get(id: string) {
                 if (id === "chris-premades") return { active: cprActive };
                 if (id === "midi-qol") return { active: midiActive };
                 return undefined;
-            }
+            },
         },
         settings: {
             get(scope: string, key: string) {
                 if (scope === "side-initiative" && key === "useLegendaryActionWindows") return settingOn;
                 return undefined;
-            }
-        }
+            },
+        },
     } as never;
     (globalThis as { chrisPremades?: unknown }).chrisPremades = chrisPremades;
 
@@ -225,7 +277,7 @@ function installGlobals(options: InstallOptions = {}): InstalledEnv {
             globalThis.ui = original.ui;
             globalThis.Hooks = original.Hooks;
             (globalThis as { chrisPremades?: unknown }).chrisPremades = original.chrisPremades;
-        }
+        },
     };
 }
 
@@ -256,7 +308,7 @@ test("getExpectedAttackCount treats 'Three Extra Attacks' as 4 attacks", () => {
 test("getExpectedAttackCount detects Extra Attack via identifier slug", () => {
     const actor = makeActor({
         id: "fighter",
-        items: [{ id: "x", name: "Weird Localized Name", type: "feat", system: { identifier: "two-extra-attacks" } }]
+        items: [{ id: "x", name: "Weird Localized Name", type: "feat", system: { identifier: "two-extra-attacks" } }],
     });
     assert.equal(getExpectedAttackCount(actor), 3);
 });
@@ -264,7 +316,7 @@ test("getExpectedAttackCount detects Extra Attack via identifier slug", () => {
 test("getExpectedAttackCount takes the maximum grant when multiple features are present", () => {
     const actor = makeActor({
         id: "fighter",
-        items: [featureItem("Extra Attack"), featureItem("Three Extra Attacks")]
+        items: [featureItem("Extra Attack"), featureItem("Three Extra Attacks")],
     });
     assert.equal(getExpectedAttackCount(actor), 4);
 });
@@ -277,14 +329,14 @@ test("classifyActionActivity flags a weapon attack action as a triggering attack
     const weapon = { type: "weapon", system: { type: "weapon" } };
     assert.deepEqual(classifyActionActivity({ activation: { type: "action" }, type: "attack" }, weapon), {
         triggers: true,
-        isAttack: true
+        isAttack: true,
     });
 });
 
 test("classifyActionActivity treats a non-attack action as triggering but not an attack", () => {
     assert.deepEqual(classifyActionActivity({ activation: { type: "action" }, type: "cast" }, { type: "spell" }), {
         triggers: true,
-        isAttack: false
+        isAttack: false,
     });
 });
 
@@ -293,7 +345,7 @@ test("classifyActionActivity does not treat an attack-spell as an Extra-Attack a
     const spell = { type: "spell", system: { type: "spell" } };
     assert.deepEqual(classifyActionActivity({ activation: { type: "action" }, type: "attack" }, spell), {
         triggers: true,
-        isAttack: false
+        isAttack: false,
     });
 });
 
@@ -301,7 +353,7 @@ test("classifyActionActivity ignores bonus actions, reactions, specials and lege
     for (const activationType of ["bonus", "reaction", "special", "legendary", "lair", "mythic"]) {
         assert.deepEqual(
             classifyActionActivity({ activation: { type: activationType }, type: "attack" }, { type: "weapon" }),
-            { triggers: false, isAttack: false }
+            { triggers: false, isAttack: false },
         );
     }
 });
@@ -403,7 +455,9 @@ test("a single non-attack action opens a window immediately", async () => {
         registerLegendaryActionsIntegration();
         const [handler] = env.hooks.get("midi-qol.RollComplete");
 
-        await handler(makeWorkflow({ actor: pcActor, activationType: "action", activityType: "cast", item: { type: "spell" } }));
+        await handler(
+            makeWorkflow({ actor: pcActor, activationType: "action", activityType: "cast", item: { type: "spell" } }),
+        );
         assert.equal(env.dialogCalls.length, 1);
     } finally {
         env.restore();
@@ -419,7 +473,9 @@ test("bonus actions and reactions do not open a window", async () => {
         const [handler] = env.hooks.get("midi-qol.RollComplete");
 
         for (const activationType of ["bonus", "reaction", "special"]) {
-            await handler(makeWorkflow({ actor: pcActor, activationType, activityType: "attack", item: { type: "weapon" } }));
+            await handler(
+                makeWorkflow({ actor: pcActor, activationType, activityType: "attack", item: { type: "weapon" } }),
+            );
         }
         assert.equal(env.dialogCalls.length, 0);
     } finally {
@@ -442,7 +498,9 @@ test("no prompt when no opposing legendary creature can act", async () => {
         registerLegendaryActionsIntegration();
         const [handler] = env.hooks.get("midi-qol.RollComplete");
 
-        await handler(makeWorkflow({ actor: pcActor, activationType: "action", activityType: "cast", item: { type: "spell" } }));
+        await handler(
+            makeWorkflow({ actor: pcActor, activationType: "action", activityType: "cast", item: { type: "spell" } }),
+        );
         assert.equal(env.dialogCalls.length, 0);
     } finally {
         env.restore();
@@ -457,7 +515,9 @@ test("windows only open on the primary GM client", async () => {
         registerLegendaryActionsIntegration();
         const [handler] = env.hooks.get("midi-qol.RollComplete");
 
-        await handler(makeWorkflow({ actor: pcActor, activationType: "action", activityType: "cast", item: { type: "spell" } }));
+        await handler(
+            makeWorkflow({ actor: pcActor, activationType: "action", activityType: "cast", item: { type: "spell" } }),
+        );
         assert.equal(env.dialogCalls.length, 0);
     } finally {
         env.restore();
@@ -467,7 +527,9 @@ test("windows only open on the primary GM client", async () => {
 test("a second action taken while a prompt is open does not stack a second dialog", async () => {
     const { combat, pcActor } = setupSideCombat();
     let resolveDialog!: (value: unknown) => void;
-    const pending = new Promise((resolve) => { resolveDialog = resolve; });
+    const pending = new Promise((resolve) => {
+        resolveDialog = resolve;
+    });
     const env = installGlobals({ combat, dialogResult: pending });
     try {
         resetLegendaryActionsIntegrationState();
@@ -475,8 +537,12 @@ test("a second action taken while a prompt is open does not stack a second dialo
         const [handler] = env.hooks.get("midi-qol.RollComplete");
 
         // First action opens a prompt (pending); second action arrives before it resolves.
-        void handler(makeWorkflow({ actor: pcActor, activationType: "action", activityType: "cast", item: { type: "spell" } }));
-        void handler(makeWorkflow({ actor: pcActor, activationType: "action", activityType: "cast", item: { type: "spell" } }));
+        void handler(
+            makeWorkflow({ actor: pcActor, activationType: "action", activityType: "cast", item: { type: "spell" } }),
+        );
+        void handler(
+            makeWorkflow({ actor: pcActor, activationType: "action", activityType: "cast", item: { type: "spell" } }),
+        );
 
         resolveDialog({ buttons: false });
         await Promise.resolve();
@@ -496,7 +562,9 @@ test("the feature is inert while the setting is off", async () => {
         registerLegendaryActionsIntegration();
         const [handler] = env.hooks.get("midi-qol.RollComplete");
 
-        await handler(makeWorkflow({ actor: pcActor, activationType: "action", activityType: "cast", item: { type: "spell" } }));
+        await handler(
+            makeWorkflow({ actor: pcActor, activationType: "action", activityType: "cast", item: { type: "spell" } }),
+        );
         assert.equal(env.dialogCalls.length, 0);
     } finally {
         env.restore();
@@ -532,7 +600,9 @@ test("a graceful disable (no dialog) when the CPR API shape is unsupported", asy
         registerLegendaryActionsIntegration();
         const [handler] = env.hooks.get("midi-qol.RollComplete");
 
-        await handler(makeWorkflow({ actor: pcActor, activationType: "action", activityType: "cast", item: { type: "spell" } }));
+        await handler(
+            makeWorkflow({ actor: pcActor, activationType: "action", activityType: "cast", item: { type: "spell" } }),
+        );
         assert.equal(env.dialogCalls.length, 0);
         assert.equal(env.warnings.length, 1);
     } finally {
@@ -556,7 +626,9 @@ test("selecting a legendary action executes it via CPR workflowUtils.completeIte
         registerLegendaryActionsIntegration();
         const [handler] = env.hooks.get("midi-qol.RollComplete");
 
-        await handler(makeWorkflow({ actor: pcActor, activationType: "action", activityType: "cast", item: { type: "spell" } }));
+        await handler(
+            makeWorkflow({ actor: pcActor, activationType: "action", activityType: "cast", item: { type: "spell" } }),
+        );
 
         assert.equal(env.completeItemUseCalls.length, 1);
         assert.equal(env.completeItemUseCalls[0].item, leg);

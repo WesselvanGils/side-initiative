@@ -61,12 +61,18 @@ export interface ActorLike extends Flaggable {
     type?: string;
     hasPlayerOwner?: boolean;
     combatant?: CombatantLike | null;
-    prototypeToken?: Record<string, any> & { disposition?: number; combatant?: CombatantLike | null };
+    prototypeToken?: Record<string, any> & {
+        disposition?: number;
+        combatant?: CombatantLike | null;
+    };
     token?: Record<string, any> & { combatant?: CombatantLike | null };
     /** dnd5e system data is accessed dynamically (xp weighting, etc.). */
     system?: Record<string, any>;
     getActiveTokens?(): Array<{ combatant?: CombatantLike | null } | null | undefined>;
-    effects?: { get?(id: string): { delete?(): Promise<unknown> | unknown } | null | undefined; [key: string]: any };
+    effects?: {
+        get?(id: string): { delete?(): Promise<unknown> | unknown } | null | undefined;
+        [key: string]: any;
+    };
     update?(data: Record<string, unknown>): Promise<unknown>;
 }
 
@@ -79,7 +85,11 @@ export interface TokenLike {
     disposition?: number;
     combatant?: CombatantLike | null;
     actor?: ActorLike | null;
-    document?: TokenLike & { actor?: ActorLike | null; combatant?: CombatantLike | null; disposition?: number };
+    document?: TokenLike & {
+        actor?: ActorLike | null;
+        combatant?: CombatantLike | null;
+        disposition?: number;
+    };
     object?: { id?: string; document?: TokenLike };
     regions?: Set<unknown>;
     testInsideRegion?(region: unknown): boolean;
@@ -99,7 +109,11 @@ export interface CombatantLike extends Flaggable {
     actor?: ActorLike | null;
     token?: TokenLike | null;
     tokenDocument?: TokenLike | null;
-    document?: Record<string, any> & { actor?: ActorLike | null; token?: TokenLike | null; disposition?: number };
+    document?: Record<string, any> & {
+        actor?: ActorLike | null;
+        token?: TokenLike | null;
+        disposition?: number;
+    };
     group?: { members: Set<CombatantLike> | CombatantLike[] } | null;
     testUserPermission?(user: unknown, permission: string): boolean;
     getInitiativeRoll?(): unknown;
@@ -143,8 +157,10 @@ export interface CombatLike extends Flaggable {
     current?: Record<string, any> & { tokenId?: string | null };
     combatants?: CombatantsCollection | CombatantLike[] | Map<string, CombatantLike>;
     turns?: CombatantsCollection | CombatantLike[] | Map<string, CombatantLike>;
-    groups?: Record<string, any> & { get?(id: string): { members: Set<CombatantLike> | CombatantLike[] } | null };
-    update?(data: Record<string, unknown>): Promise<unknown>;
+    groups?: Record<string, any> & {
+        get?(id: string): { members: Set<CombatantLike> | CombatantLike[] } | null;
+    };
+    update?(data: Record<string, unknown>, options?: Record<string, unknown>): Promise<unknown>;
     updateEmbeddedDocuments?(type: string, docs: unknown[]): Promise<unknown>;
     rollAll?(options?: Record<string, unknown>): Promise<unknown>;
     rollInitiative?(ids: string[], options?: Record<string, unknown>): Promise<unknown>;

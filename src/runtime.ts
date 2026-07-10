@@ -26,7 +26,12 @@ export function getUsers(): UsersLike | null {
 
 export function getActiveGMUser(): UserLike | null {
     const users = getUsers();
-    return users?.activeGM ?? users?.getActiveGM?.() ?? Array.from(users?.contents ?? []).find((user) => user?.isGM && user?.active) ?? null;
+    return (
+        users?.activeGM ??
+        users?.getActiveGM?.() ??
+        Array.from(users?.contents ?? []).find((user) => user?.isGM && user?.active) ??
+        null
+    );
 }
 
 export function isActiveGMClient(): boolean {
@@ -46,7 +51,7 @@ export function isPrimaryGMClient(): boolean {
 }
 
 export function getSideInitiative(): SideInitiativeApi | undefined {
-    return (game as ({ sideInitiative?: SideInitiativeApi } | null))?.sideInitiative;
+    return (game as { sideInitiative?: SideInitiativeApi } | null)?.sideInitiative;
 }
 
 export function setSideInitiative(api: SideInitiativeApi): void {
@@ -55,7 +60,7 @@ export function setSideInitiative(api: SideInitiativeApi): void {
 }
 
 export function getGps(): GambitsPremadesApi | undefined {
-    return (game as ({ gps?: GambitsPremadesApi } | null))?.gps;
+    return (game as { gps?: GambitsPremadesApi } | null)?.gps;
 }
 
 export function getSetting(scope: string, key: string): unknown {

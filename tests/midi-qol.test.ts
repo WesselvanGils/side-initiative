@@ -10,7 +10,7 @@ function createCombatant({ id, sideId, actor, defeated = false }) {
         getFlag(scope, key) {
             if (scope === "side-initiative" && key === "sideId") return sideId;
             return null;
-        }
+        },
     };
 }
 
@@ -26,13 +26,13 @@ function createReactionActor({ id, uuid = `${id}-uuid`, deletes, updates, delete
                     async delete() {
                         if (deleteError) throw deleteError;
                         deletes?.push({ actorUuid: uuid, effectId: reactionEffectId });
-                    }
-                }
-            ]
+                    },
+                },
+            ],
         ]),
         async update(data) {
             updates?.push({ actorUuid: uuid, data });
-        }
+        },
     };
 }
 
@@ -46,7 +46,7 @@ function createHooks() {
         once() {},
         get(name) {
             return registry.get(name) ?? [];
-        }
+        },
     };
 }
 
@@ -55,7 +55,7 @@ function installGlobals({ combat, midiQol = {} } = {}) {
         Hooks: globalThis.Hooks,
         game: globalThis.game,
         MidiQOL: globalThis.MidiQOL,
-        midiQOL: globalThis.midiQOL
+        midiQOL: globalThis.midiQOL,
     };
 
     const hooks = createHooks();
@@ -64,8 +64,8 @@ function installGlobals({ combat, midiQol = {} } = {}) {
         combat: combat ?? null,
         user: { id: "gm-1", isGM: true },
         users: {
-            activeGM: { id: "gm-1", isGM: true, active: true }
-        }
+            activeGM: { id: "gm-1", isGM: true, active: true },
+        },
     };
     globalThis.MidiQOL = midiQol;
     globalThis.midiQOL = midiQol;
@@ -77,7 +77,7 @@ function installGlobals({ combat, midiQol = {} } = {}) {
             globalThis.game = original.game;
             globalThis.MidiQOL = original.MidiQOL;
             globalThis.midiQOL = original.midiQOL;
-        }
+        },
     };
 }
 
@@ -95,13 +95,13 @@ test("MidiQOL blocks reaction consumption for actors on the active side", async 
                     activeSideId: "players",
                     order: ["players"],
                     sides: {
-                        players: { id: "players", combatantIds: ["pc-1"] }
+                        players: { id: "players", combatantIds: ["pc-1"] },
                     },
-                    commanderIds: {}
+                    commanderIds: {},
                 };
             }
             return null;
-        }
+        },
     };
 
     const env = installGlobals({ combat });
@@ -127,7 +127,7 @@ test("MidiQOL clears used reactions for all actors on the side when it becomes a
             createCombatant({ id: "pc-1", sideId: "players", actor: actorOne }),
             createCombatant({ id: "pc-2", sideId: "players", actor: actorOne }),
             createCombatant({ id: "pc-3", sideId: "players", actor: actorTwo }),
-            createCombatant({ id: "pc-4", sideId: "players", actor: defeatedActor, defeated: true })
+            createCombatant({ id: "pc-4", sideId: "players", actor: defeatedActor, defeated: true }),
         ],
         getFlag(scope, key) {
             if (scope === "side-initiative" && key === "state") {
@@ -136,13 +136,13 @@ test("MidiQOL clears used reactions for all actors on the side when it becomes a
                     order: ["players", "monsters"],
                     sides: {
                         players: { id: "players", combatantIds: ["pc-1", "pc-2", "pc-3", "pc-4"] },
-                        monsters: { id: "monsters", combatantIds: [] }
+                        monsters: { id: "monsters", combatantIds: [] },
                     },
-                    commanderIds: {}
+                    commanderIds: {},
                 };
             }
             return null;
-        }
+        },
     };
 
     const env = installGlobals({ combat });
@@ -154,7 +154,7 @@ test("MidiQOL clears used reactions for all actors on the side when it becomes a
 
         assert.deepEqual(deletes, [
             { actorUuid: "actor-1-uuid", effectId: "dnd5ereaction000" },
-            { actorUuid: "actor-2-uuid", effectId: "dnd5ereaction000" }
+            { actorUuid: "actor-2-uuid", effectId: "dnd5ereaction000" },
         ]);
         assert.deepEqual(updates, [
             {
@@ -165,11 +165,11 @@ test("MidiQOL clears used reactions for all actors on the side when it becomes a
                             actions: {
                                 reactionUsed: 0,
                                 reactionsUsed: 0,
-                                "-=reactionCombatRound": null
-                            }
-                        }
-                    }
-                }
+                                "-=reactionCombatRound": null,
+                            },
+                        },
+                    },
+                },
             },
             {
                 actorUuid: "actor-2-uuid",
@@ -179,12 +179,12 @@ test("MidiQOL clears used reactions for all actors on the side when it becomes a
                             actions: {
                                 reactionUsed: 0,
                                 reactionsUsed: 0,
-                                "-=reactionCombatRound": null
-                            }
-                        }
-                    }
-                }
-            }
+                                "-=reactionCombatRound": null,
+                            },
+                        },
+                    },
+                },
+            },
         ]);
     } finally {
         env.restore();
@@ -207,12 +207,12 @@ test("MidiQOL clears used reactions for distinct monster token actors even when 
                 token: {
                     id: "token-1",
                     uuid: "token-1-uuid",
-                    actor: monsterOneActor
+                    actor: monsterOneActor,
                 },
                 getFlag(scope, key) {
                     if (scope === "side-initiative" && key === "sideId") return "monsters";
                     return null;
-                }
+                },
             },
             {
                 id: "npc-2",
@@ -220,13 +220,13 @@ test("MidiQOL clears used reactions for distinct monster token actors even when 
                 token: {
                     id: "token-2",
                     uuid: "token-2-uuid",
-                    actor: monsterTwoActor
+                    actor: monsterTwoActor,
                 },
                 getFlag(scope, key) {
                     if (scope === "side-initiative" && key === "sideId") return "monsters";
                     return null;
-                }
-            }
+                },
+            },
         ],
         getFlag(scope, key) {
             if (scope === "side-initiative" && key === "state") {
@@ -235,13 +235,13 @@ test("MidiQOL clears used reactions for distinct monster token actors even when 
                     order: ["players", "monsters"],
                     sides: {
                         players: { id: "players", combatantIds: [] },
-                        monsters: { id: "monsters", combatantIds: ["npc-1", "npc-2"] }
+                        monsters: { id: "monsters", combatantIds: ["npc-1", "npc-2"] },
                     },
-                    commanderIds: {}
+                    commanderIds: {},
                 };
             }
             return null;
-        }
+        },
     };
 
     const env = installGlobals({ combat });
@@ -253,7 +253,7 @@ test("MidiQOL clears used reactions for distinct monster token actors even when 
 
         assert.deepEqual(deletes, [
             { actorUuid: "monster-one-uuid", effectId: "dnd5ereaction000" },
-            { actorUuid: "monster-two-uuid", effectId: "dnd5ereaction000" }
+            { actorUuid: "monster-two-uuid", effectId: "dnd5ereaction000" },
         ]);
         assert.deepEqual(updates, [
             {
@@ -264,11 +264,11 @@ test("MidiQOL clears used reactions for distinct monster token actors even when 
                             actions: {
                                 reactionUsed: 0,
                                 reactionsUsed: 0,
-                                "-=reactionCombatRound": null
-                            }
-                        }
-                    }
-                }
+                                "-=reactionCombatRound": null,
+                            },
+                        },
+                    },
+                },
             },
             {
                 actorUuid: "monster-two-uuid",
@@ -278,12 +278,12 @@ test("MidiQOL clears used reactions for distinct monster token actors even when 
                             actions: {
                                 reactionUsed: 0,
                                 reactionsUsed: 0,
-                                "-=reactionCombatRound": null
-                            }
-                        }
-                    }
-                }
-            }
+                                "-=reactionCombatRound": null,
+                            },
+                        },
+                    },
+                },
+            },
         ]);
     } finally {
         env.restore();
@@ -297,14 +297,14 @@ test("MidiQOL continues clearing side reactions when one actor has a stale react
         id: "actor-1",
         deletes,
         updates,
-        deleteError: new Error('ActiveEffect "dnd5ereaction000" does not exist!')
+        deleteError: new Error('ActiveEffect "dnd5ereaction000" does not exist!'),
     });
     const actorTwo = createReactionActor({ id: "actor-2", deletes, updates });
     const combat = {
         started: true,
         combatants: [
             createCombatant({ id: "npc-1", sideId: "monsters", actor: actorOne }),
-            createCombatant({ id: "npc-2", sideId: "monsters", actor: actorTwo })
+            createCombatant({ id: "npc-2", sideId: "monsters", actor: actorTwo }),
         ],
         getFlag(scope, key) {
             if (scope === "side-initiative" && key === "state") {
@@ -313,13 +313,13 @@ test("MidiQOL continues clearing side reactions when one actor has a stale react
                     order: ["players", "monsters"],
                     sides: {
                         players: { id: "players", combatantIds: [] },
-                        monsters: { id: "monsters", combatantIds: ["npc-1", "npc-2"] }
+                        monsters: { id: "monsters", combatantIds: ["npc-1", "npc-2"] },
                     },
-                    commanderIds: {}
+                    commanderIds: {},
                 };
             }
             return null;
-        }
+        },
     };
 
     const env = installGlobals({ combat });
@@ -329,10 +329,11 @@ test("MidiQOL continues clearing side reactions when one actor has a stale react
         const [sideTurnStart] = env.hooks.get("side-initiative.sideTurnStart");
         await sideTurnStart({ combat, sideId: "monsters" });
 
-        assert.deepEqual(deletes, [
-            { actorUuid: "actor-2-uuid", effectId: "dnd5ereaction000" }
-        ]);
-        assert.deepEqual(updates.map((entry) => entry.actorUuid), ["actor-1-uuid", "actor-2-uuid"]);
+        assert.deepEqual(deletes, [{ actorUuid: "actor-2-uuid", effectId: "dnd5ereaction000" }]);
+        assert.deepEqual(
+            updates.map((entry) => entry.actorUuid),
+            ["actor-1-uuid", "actor-2-uuid"],
+        );
     } finally {
         env.restore();
     }
@@ -345,14 +346,14 @@ test("MidiQOL skips the side commander because the active combatant reset is han
         id: "commander",
         deletes,
         updates,
-        deleteError: new Error('ActiveEffect "dnd5ereaction000" does not exist!')
+        deleteError: new Error('ActiveEffect "dnd5ereaction000" does not exist!'),
     });
     const memberActor = createReactionActor({ id: "member", deletes, updates });
     const combat = {
         started: true,
         combatants: [
             createCombatant({ id: "npc-commander", sideId: "monsters", actor: commanderActor }),
-            createCombatant({ id: "npc-member", sideId: "monsters", actor: memberActor })
+            createCombatant({ id: "npc-member", sideId: "monsters", actor: memberActor }),
         ],
         getFlag(scope, key) {
             if (scope === "side-initiative" && key === "state") {
@@ -362,15 +363,15 @@ test("MidiQOL skips the side commander because the active combatant reset is han
                     order: ["players", "monsters"],
                     sides: {
                         players: { id: "players", combatantIds: [] },
-                        monsters: { id: "monsters", combatantIds: ["npc-commander", "npc-member"] }
+                        monsters: { id: "monsters", combatantIds: ["npc-commander", "npc-member"] },
                     },
                     commanderIds: {
-                        monsters: "npc-commander"
-                    }
+                        monsters: "npc-commander",
+                    },
                 };
             }
             return null;
-        }
+        },
     };
 
     const env = installGlobals({ combat });
@@ -380,10 +381,11 @@ test("MidiQOL skips the side commander because the active combatant reset is han
         const [sideTurnStart] = env.hooks.get("side-initiative.sideTurnStart");
         await sideTurnStart({ combat, sideId: "monsters" });
 
-        assert.deepEqual(deletes, [
-            { actorUuid: "member-uuid", effectId: "dnd5ereaction000" }
-        ]);
-        assert.deepEqual(updates.map((entry) => entry.actorUuid), ["member-uuid"]);
+        assert.deepEqual(deletes, [{ actorUuid: "member-uuid", effectId: "dnd5ereaction000" }]);
+        assert.deepEqual(
+            updates.map((entry) => entry.actorUuid),
+            ["member-uuid"],
+        );
     } finally {
         env.restore();
     }
@@ -401,20 +403,18 @@ test("MidiQOL clears a single used reaction effect when the API is unavailable",
                 {
                     async delete() {
                         deletes.push(reactionEffectId);
-                    }
-                }
-            ]
+                    },
+                },
+            ],
         ]),
         async update(data) {
             updates.push(data);
-        }
+        },
     };
 
     const combat = {
         started: true,
-        combatants: [
-            createCombatant({ id: "pc-1", sideId: "players", actor })
-        ],
+        combatants: [createCombatant({ id: "pc-1", sideId: "players", actor })],
         getFlag(scope, key) {
             if (scope === "side-initiative" && key === "state") {
                 return {
@@ -422,13 +422,13 @@ test("MidiQOL clears a single used reaction effect when the API is unavailable",
                     order: ["players", "monsters"],
                     sides: {
                         players: { id: "players", combatantIds: ["pc-1"] },
-                        monsters: { id: "monsters", combatantIds: [] }
+                        monsters: { id: "monsters", combatantIds: [] },
                     },
-                    commanderIds: {}
+                    commanderIds: {},
                 };
             }
             return null;
-        }
+        },
     };
 
     const env = installGlobals({ combat, midiQol: {} });
@@ -446,11 +446,11 @@ test("MidiQOL clears a single used reaction effect when the API is unavailable",
                         actions: {
                             reactionUsed: 0,
                             reactionsUsed: 0,
-                            "-=reactionCombatRound": null
-                        }
-                    }
-                }
-            }
+                            "-=reactionCombatRound": null,
+                        },
+                    },
+                },
+            },
         ]);
     } finally {
         env.restore();

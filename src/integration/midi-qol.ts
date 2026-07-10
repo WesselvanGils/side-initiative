@@ -1,16 +1,13 @@
-import {
-    getCombatState,
-    getCombatantsForSide,
-    getSideCommanderId,
-    isActorOnActiveSide
-} from "../logic.js";
+import { getCombatState, getCombatantsForSide, getSideCommanderId, isActorOnActiveSide } from "../logic.js";
 import { hooks, isPrimaryGMClient } from "../runtime.js";
 import type { ActorLike, CombatLike, CombatantLike, SideTurnPayload } from "../types.js";
 
 const REACTION_EFFECT_ID = "dnd5ereaction000";
 
 function getActorKey(actor: ActorLike | null | undefined, combatant: CombatantLike | null | undefined): string | null {
-    return actor?.uuid ?? combatant?.token?.uuid ?? combatant?.token?.document?.uuid ?? actor?.id ?? combatant?.id ?? null;
+    return (
+        actor?.uuid ?? combatant?.token?.uuid ?? combatant?.token?.document?.uuid ?? actor?.id ?? combatant?.id ?? null
+    );
 }
 
 function collectCombatantActors(combatant: CombatantLike | null | undefined): ActorLike[] {
@@ -22,7 +19,7 @@ function collectCombatantActors(combatant: CombatantLike | null | undefined): Ac
         combatant?.document?.token,
         combatant?.token?.document,
         combatant?.token?.object,
-        combatant?.token?.object?.document
+        combatant?.token?.object?.document,
     ];
 
     const pushActor = (actor: ActorLike | null | undefined, fallbackKey: string | null = null): void => {
@@ -34,11 +31,17 @@ function collectCombatantActors(combatant: CombatantLike | null | undefined): Ac
     };
 
     for (const token of tokenSources) {
-        pushActor(token?.actor ?? token?.document?.actor ?? null, token?.uuid ?? token?.document?.uuid ?? combatant?.id ?? null);
+        pushActor(
+            token?.actor ?? token?.document?.actor ?? null,
+            token?.uuid ?? token?.document?.uuid ?? combatant?.id ?? null,
+        );
     }
 
     for (const token of (combatant?.actor?.getActiveTokens?.() ?? []) as Array<Record<string, any>>) {
-        pushActor(token?.actor ?? token?.document?.actor ?? null, token?.uuid ?? token?.document?.uuid ?? combatant?.id ?? null);
+        pushActor(
+            token?.actor ?? token?.document?.actor ?? null,
+            token?.uuid ?? token?.document?.uuid ?? combatant?.id ?? null,
+        );
     }
 
     if (!actors.length) {
@@ -66,14 +69,17 @@ async function resetReactionUsed(actor: ActorLike | null | undefined): Promise<v
                 actions: {
                     reactionUsed: 0,
                     reactionsUsed: 0,
-                    "-=reactionCombatRound": null
-                }
-            }
-        }
+                    "-=reactionCombatRound": null,
+                },
+            },
+        },
     });
 }
 
-function getCommanderCombatantIds(combat: CombatLike | null | undefined, sideId: string | null | undefined): Set<string> {
+function getCommanderCombatantIds(
+    combat: CombatLike | null | undefined,
+    sideId: string | null | undefined,
+): Set<string> {
     const ids = new Set<string>();
     const commanderId = getSideCommanderId(combat, sideId ?? "");
     if (commanderId) ids.add(commanderId);
@@ -86,7 +92,10 @@ function getCommanderCombatantIds(combat: CombatLike | null | undefined, sideId:
     return ids;
 }
 
-async function resetReactionsForSide(combat: CombatLike | null | undefined, sideId: string | null | undefined): Promise<void> {
+async function resetReactionsForSide(
+    combat: CombatLike | null | undefined,
+    sideId: string | null | undefined,
+): Promise<void> {
     if (!combat?.started || !sideId) return;
 
     const actors = new Map<string, ActorLike>();

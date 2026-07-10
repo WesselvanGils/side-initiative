@@ -5,12 +5,12 @@ import { INITIATIVE_METHOD_OPTIONS } from "../src/constants.js";
 async function loadModuleUnderTest(game) {
     const original = {
         Hooks: globalThis.Hooks,
-        game: globalThis.game
+        game: globalThis.game,
     };
 
     globalThis.Hooks = {
         once() {},
-        on() {}
+        on() {},
     };
     globalThis.game = game;
 
@@ -20,7 +20,7 @@ async function loadModuleUnderTest(game) {
         restore() {
             globalThis.Hooks = original.Hooks;
             globalThis.game = original.game;
-        }
+        },
     };
 }
 
@@ -32,7 +32,7 @@ test("handleCombatStartedUpdate rolls weighted initiative when enabled", async (
             get() {
                 return null;
             },
-            contents: []
+            contents: [],
         },
         user: { id: "gm-1", isGM: true },
         settings: {
@@ -41,7 +41,7 @@ test("handleCombatStartedUpdate rolls weighted initiative when enabled", async (
                     return INITIATIVE_METHOD_OPTIONS.weightedAverage;
                 }
                 return null;
-            }
+            },
         },
         sideInitiative: {
             refreshCombatantSides: async (combat) => {
@@ -51,15 +51,15 @@ test("handleCombatStartedUpdate rolls weighted initiative when enabled", async (
             rollWeightedSideInitiative: async (combat, options) => {
                 calls.push(["weighted", combat.id, options]);
                 return { id: combat.id };
-            }
-        }
+            },
+        },
     });
 
     try {
         await module.handleCombatStartedUpdate({ id: "combat-1", round: 1 }, { started: true });
         assert.deepEqual(calls, [
             ["refresh", "combat-1"],
-            ["weighted", "combat-1", { refresh: false }]
+            ["weighted", "combat-1", { refresh: false }],
         ]);
     } finally {
         restore();
@@ -74,7 +74,7 @@ test("handleCombatStartedUpdate skips weighted rolling when the mode is side d20
             get() {
                 return null;
             },
-            contents: []
+            contents: [],
         },
         user: { id: "gm-1", isGM: true },
         settings: {
@@ -83,7 +83,7 @@ test("handleCombatStartedUpdate skips weighted rolling when the mode is side d20
                     return INITIATIVE_METHOD_OPTIONS.sideD20;
                 }
                 return null;
-            }
+            },
         },
         sideInitiative: {
             refreshCombatantSides: async (combat) => {
@@ -93,15 +93,13 @@ test("handleCombatStartedUpdate skips weighted rolling when the mode is side d20
             rollWeightedSideInitiative: async (combat, options) => {
                 calls.push(["weighted", combat.id, options]);
                 return { id: combat.id };
-            }
-        }
+            },
+        },
     });
 
     try {
         await module.handleCombatStartedUpdate({ id: "combat-2", round: 1 }, { started: true });
-        assert.deepEqual(calls, [
-            ["refresh", "combat-2"]
-        ]);
+        assert.deepEqual(calls, [["refresh", "combat-2"]]);
     } finally {
         restore();
     }

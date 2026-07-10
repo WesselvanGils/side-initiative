@@ -7,8 +7,8 @@ const SUPPORTED_OPPORTUNITY_ATTACK_SOURCE_MARKERS = [
     "canvas.tokens.get(game.combat?.current.tokenId)",
     "currentCombatant?.id !== token.object.id",
     "not tokens turn in combat",
-    "regionScenario === \"onTurnStart\"",
-    "let behaviors = region.behaviors.filter(b => b.name === \"onExit\" || b.name === \"onEnter\")"
+    'regionScenario === "onTurnStart"',
+    'let behaviors = region.behaviors.filter(b => b.name === "onExit" || b.name === "onEnter")',
 ];
 
 type OpportunityAttackFn = (payload: Record<string, unknown>) => Promise<unknown>;
@@ -30,7 +30,7 @@ const integrationState: GambitsIntegrationState = {
     originalOpportunityAttackScenarios: null,
     patchedOpportunityAttackScenarios: null,
     warnedKeys: new Set(),
-    bridgeRegistered: false
+    bridgeRegistered: false,
 };
 
 function getGambitsModule(): { active?: boolean; version?: string; data?: { version?: string } } | null {
@@ -47,7 +47,9 @@ export function getGambitsPremadesVersion(): string | null {
 /**
  * Determine whether the installed Gambits Premades version is supported.
  */
-export function isSupportedGambitsPremadesVersion(version: string | null | undefined = getGambitsPremadesVersion()): boolean {
+export function isSupportedGambitsPremadesVersion(
+    version: string | null | undefined = getGambitsPremadesVersion(),
+): boolean {
     return SUPPORTED_GAMBITS_PREMADES_VERSIONS.includes(String(version ?? ""));
 }
 
@@ -71,11 +73,15 @@ export function validateGambitsOpportunityAttackSource(fn: unknown): fn is Oppor
 /**
  * Return the current integration state for tests and diagnostics.
  */
-export function getGambitsPremadesIntegrationState(): { status: string; version: string | null; reason: string | null } {
+export function getGambitsPremadesIntegrationState(): {
+    status: string;
+    version: string | null;
+    reason: string | null;
+} {
     return {
         status: integrationState.status,
         version: integrationState.version,
-        reason: integrationState.reason
+        reason: integrationState.reason,
     };
 }
 
@@ -106,7 +112,12 @@ function restoreOriginalOpportunityAttackScenarios(): void {
     }
 }
 
-function disableIntegration(status: GambitsIntegrationState["status"], reason: string, warningKey: string | null = null, warningMessage: string | null = null): void {
+function disableIntegration(
+    status: GambitsIntegrationState["status"],
+    reason: string,
+    warningKey: string | null = null,
+    warningMessage: string | null = null,
+): void {
     restoreOriginalOpportunityAttackScenarios();
     integrationState.status = status;
     integrationState.reason = reason;
@@ -127,7 +138,13 @@ interface RegionLike {
     uuid?: string;
     id?: string;
     flags?: Record<string, unknown>;
-    behaviors?: RegionBehaviorLike[] | { filter?(pred: (b: RegionBehaviorLike) => boolean): RegionBehaviorLike[]; values?(): IterableIterator<RegionBehaviorLike>; [Symbol.iterator]?(): IterableIterator<RegionBehaviorLike> };
+    behaviors?:
+        | RegionBehaviorLike[]
+        | {
+              filter?(pred: (b: RegionBehaviorLike) => boolean): RegionBehaviorLike[];
+              values?(): IterableIterator<RegionBehaviorLike>;
+              [Symbol.iterator]?(): IterableIterator<RegionBehaviorLike>;
+          };
     object?: { containsToken?(token: unknown): boolean };
 }
 
@@ -135,9 +152,14 @@ function getRegionBehaviors(region: RegionLike | null | undefined): RegionBehavi
     const behaviors = region?.behaviors;
     if (!behaviors) return [];
     if (Array.isArray(behaviors)) return behaviors;
-    if (typeof (behaviors as { filter?: unknown }).filter === "function") return (behaviors as { filter: (pred: (b: RegionBehaviorLike) => boolean) => RegionBehaviorLike[] }).filter(() => true);
-    if (typeof (behaviors as { values?: unknown }).values === "function") return Array.from((behaviors as { values: () => IterableIterator<RegionBehaviorLike> }).values());
-    if (typeof (behaviors as { [Symbol.iterator]?: unknown })[Symbol.iterator] === "function") return Array.from(behaviors as Iterable<RegionBehaviorLike>);
+    if (typeof (behaviors as { filter?: unknown }).filter === "function")
+        return (behaviors as { filter: (pred: (b: RegionBehaviorLike) => boolean) => RegionBehaviorLike[] }).filter(
+            () => true,
+        );
+    if (typeof (behaviors as { values?: unknown }).values === "function")
+        return Array.from((behaviors as { values: () => IterableIterator<RegionBehaviorLike> }).values());
+    if (typeof (behaviors as { [Symbol.iterator]?: unknown })[Symbol.iterator] === "function")
+        return Array.from(behaviors as Iterable<RegionBehaviorLike>);
     return [];
 }
 
@@ -146,9 +168,17 @@ function getRegionBehaviorsByName(region: RegionLike | null | undefined, name: s
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-const AsyncFunction = (Object.getPrototypeOf(async function () {}) as { constructor: new (...args: string[]) => (...args: unknown[]) => Promise<unknown> }).constructor;
+const AsyncFunction = (
+    Object.getPrototypeOf(async () => {}) as {
+        constructor: new (...args: string[]) => (...args: unknown[]) => Promise<unknown>;
+    }
+).constructor;
 
-function runRegionBehaviorScript(behavior: RegionBehaviorLike, event: Record<string, unknown>, region: RegionLike): Promise<unknown> {
+function runRegionBehaviorScript(
+    behavior: RegionBehaviorLike,
+    event: Record<string, unknown>,
+    region: RegionLike,
+): Promise<unknown> {
     const source = behavior?.system?.source;
     if (typeof source !== "string") return Promise.resolve();
     const fn = new AsyncFunction("event", "region", source);
@@ -160,8 +190,10 @@ function getSceneRegions(): RegionLike[] {
     if (!regions) return [];
     if (regions instanceof Map) return Array.from((regions as Map<string, RegionLike>).values());
     if (Array.isArray(regions)) return regions as RegionLike[];
-    if (typeof (regions as { values?: unknown }).values === "function") return Array.from((regions as { values: () => IterableIterator<RegionLike> }).values());
-    if (typeof (regions as { [Symbol.iterator]?: unknown })[Symbol.iterator] === "function") return Array.from(regions as Iterable<RegionLike>);
+    if (typeof (regions as { values?: unknown }).values === "function")
+        return Array.from((regions as { values: () => IterableIterator<RegionLike> }).values());
+    if (typeof (regions as { [Symbol.iterator]?: unknown })[Symbol.iterator] === "function")
+        return Array.from(regions as Iterable<RegionLike>);
     return [];
 }
 
@@ -173,7 +205,8 @@ function isTokenInRegion(token: TokenLike | null | undefined, region: RegionLike
     if (!token || !region) return false;
     if (typeof token.testInsideRegion === "function") return Boolean(token.testInsideRegion(region));
     if (token.regions instanceof Set) return token.regions.has(region);
-    if (typeof region.object?.containsToken === "function") return Boolean(region.object.containsToken(token.object ?? token));
+    if (typeof region.object?.containsToken === "function")
+        return Boolean(region.object.containsToken(token.object ?? token));
     return false;
 }
 
@@ -192,7 +225,11 @@ async function bridgeSideTurn(payload: SideTurnPayload, behaviorName: string): P
         for (const region of regions) {
             if (!isGambitsRegion(region) || !isTokenInRegion(token, region)) continue;
             for (const behavior of getRegionBehaviorsByName(region, behaviorName)) {
-                await runRegionBehaviorScript(behavior, { data: { token, movement: undefined }, user: { id: userId } }, region);
+                await runRegionBehaviorScript(
+                    behavior,
+                    { data: { token, movement: undefined }, user: { id: userId } },
+                    region,
+                );
             }
         }
     }
@@ -201,12 +238,19 @@ async function bridgeSideTurn(payload: SideTurnPayload, behaviorName: string): P
 function registerSideTurnBridge(): void {
     if (integrationState.bridgeRegistered) return;
     integrationState.bridgeRegistered = true;
-    hooks()?.on("side-initiative.sideTurnStart", (payload: SideTurnPayload) => bridgeSideTurn(payload ?? {}, "onTurnStart"));
-    hooks()?.on("side-initiative.sideTurnEnd", (payload: SideTurnPayload) => bridgeSideTurn(payload ?? {}, "onTurnEnd"));
+    hooks()?.on("side-initiative.sideTurnStart", (payload: SideTurnPayload) =>
+        bridgeSideTurn(payload ?? {}, "onTurnStart"),
+    );
+    hooks()?.on("side-initiative.sideTurnEnd", (payload: SideTurnPayload) =>
+        bridgeSideTurn(payload ?? {}, "onTurnEnd"),
+    );
 }
 
 function createPatchedOpportunityAttackScenarios(original: OpportunityAttackFn): OpportunityAttackFn {
-    return async function patchedOpportunityAttackScenarios(this: unknown, payload: Record<string, unknown>): Promise<unknown> {
+    return async function patchedOpportunityAttackScenarios(
+        this: unknown,
+        payload: Record<string, unknown>,
+    ): Promise<unknown> {
         const tokenUuid = payload?.tokenUuid as string | undefined;
         const regionUuid = payload?.regionUuid as string | undefined;
         const combat = (game?.combat as CombatLike | null) ?? null;
@@ -223,7 +267,7 @@ function createPatchedOpportunityAttackScenarios(original: OpportunityAttackFn):
         const bypassGuard = Boolean(
             currentTokenId &&
                 currentTokenId !== tokenObjectId &&
-                getSideInitiative()?.isTokenOnActiveSide?.(token as TokenLike, combat)
+                getSideInitiative()?.isTokenOnActiveSide?.(token as TokenLike, combat),
         );
 
         if (!bypassGuard) {
@@ -280,8 +324,8 @@ function tryPatchGambitsOpportunityAttack(): boolean {
             "unsupported-version",
             game?.i18n?.format?.("SIDE-INITIATIVE.Notifications.GambitsOpportunityAttackUnsupportedVersion", {
                 version: version ?? "unknown",
-                supported: SUPPORTED_GAMBITS_PREMADES_VERSIONS.join(" or ")
-            }) ?? ""
+                supported: SUPPORTED_GAMBITS_PREMADES_VERSIONS.join(" or "),
+            }) ?? "",
         );
         return false;
     }
@@ -292,7 +336,7 @@ function tryPatchGambitsOpportunityAttack(): boolean {
             "unsupported",
             "Gambits Premades Opportunity Attack integration is disabled because the installed source no longer matches the supported shape.",
             "source-mismatch",
-            game?.i18n?.localize?.("SIDE-INITIATIVE.Notifications.GambitsOpportunityAttackSourceMismatch") ?? ""
+            game?.i18n?.localize?.("SIDE-INITIATIVE.Notifications.GambitsOpportunityAttackSourceMismatch") ?? "",
         );
         return false;
     }

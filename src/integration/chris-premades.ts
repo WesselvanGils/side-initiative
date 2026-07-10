@@ -1,7 +1,7 @@
 import { registerSideTurnEndFlusher } from "../api.js";
 import { getCombatantsForSide, isSideCombat, isTokenOnActiveSide } from "../logic.js";
 import { hooks, isPrimaryGMClient } from "../runtime.js";
-import type { CombatLike, CombatantLike, SideTurnPayload, TokenLike } from "../types.js";
+import type { ActorLike, CombatLike, CombatantLike, SideTurnPayload, TokenLike } from "../types.js";
 
 /**
  * Marker stamped onto CPR's `combatUtils` object once it has been wrapped, so a
@@ -45,6 +45,12 @@ function debug(...parts: unknown[]): void {
  *
  * 2. Side-turn bridge: on `side-initiative.sideTurnStart`/`sideTurnEnd`, fire the
  *    CPR `turnStart`/`turnEnd` (and `everyTurn`) passes for EVERY token on the
+ *    active side — no skip, since there is no native fire to dedup against. The
+ *    bridge mirrors `collectTokenMacros`: it collects triggers from templates,
+ *    regions, the actor's effects, AND the actor's items (the last two are what
+ *    make Blink and similar self-buff spells fire). All workflows go through a
+ *    serialized queue (mutex) so `sideTurnEnd` and
+ *    CPR `turnStart`/`turnEnd` (and `everyTurn`) passes for EVERY token on the
  *    active side — no skip, since there is no native fire to dedup against. All
  *    workflows go through a serialized queue (mutex) so `sideTurnEnd` and
  *    `sideTurnStart` (and every token within) fire one at a time. CPR does not
@@ -58,7 +64,7 @@ function debug(...parts: unknown[]): void {
  */
 
 type TurnPass = "turnStart" | "turnEnd" | "everyTurn";
-type EntityKind = "template" | "region";
+type EntityKind = "template" | "region" | "combat";
 
 interface CprMacroArg {
     trigger: SortedTrigger;
@@ -73,6 +79,7 @@ interface CprPassEntry {
 interface CprMacroExport {
     template?: CprPassEntry[];
     region?: CprPassEntry[];
+    combat?: CprPassEntry[];
 }
 
 interface CprTemplateUtils {
@@ -115,7 +122,11 @@ interface EntityTriggerCandidate extends TurnDetails {
     token: unknown;
     name: string;
     castData: { castLevel: number; saveDC: number };
-    macros: Array<{ macro: SortedTrigger["macro"]; priority: number; macroName: string }>;
+    macros: Array<{
+        macro: SortedTrigger["macro"];
+        priority: number;
+        macroName: string;
+    }>;
 }
 
 interface ChrisPremadesIntegrationState {
@@ -143,10 +154,14 @@ const integrationState: ChrisPremadesIntegrationState = {
     originalUpdateCombat: null,
     wrappedUpdateCombat: null,
     combatUtilsWrapped: false,
-    trackerHooksRegistered: false
+    trackerHooksRegistered: false,
 };
 
-function getCprModule(): { active?: boolean; version?: string; data?: { version?: string } } | null {
+function getCprModule(): {
+    active?: boolean;
+    version?: string;
+    data?: { version?: string };
+} | null {
     return game?.modules?.get?.("chris-premades") ?? null;
 }
 
@@ -169,14 +184,27 @@ function getCprApi(): CprApi | null {
  */
 export function validateCprShape(): boolean {
     const api = getCprApi();
-    return Boolean(api && typeof api === "object" && api.macros && typeof api.utils?.templateUtils?.getTemplatesInToken === "function");
+    return Boolean(
+        api &&
+            typeof api === "object" &&
+            api.macros &&
+            typeof api.utils?.templateUtils?.getTemplatesInToken === "function",
+    );
 }
 
 /**
  * Return the current integration state for tests and diagnostics.
  */
-export function getCprPremadesIntegrationState(): { status: string; version: string | null; reason: string | null } {
-    return { status: integrationState.status, version: integrationState.version, reason: integrationState.reason };
+export function getCprPremadesIntegrationState(): {
+    status: string;
+    version: string | null;
+    reason: string | null;
+} {
+    return {
+        status: integrationState.status,
+        version: integrationState.version,
+        reason: integrationState.reason,
+    };
 }
 
 /**
@@ -202,7 +230,12 @@ function warnOnce(key: string, message: string): void {
     ui?.notifications?.warn?.(message);
 }
 
-function disableIntegration(status: ChrisPremadesIntegrationState["status"], reason: string, warningKey: string | null = null, warningMessage: string | null = null): void {
+function disableIntegration(
+    status: ChrisPremadesIntegrationState["status"],
+    reason: string,
+    warningKey: string | null = null,
+    warningMessage: string | null = null,
+): void {
     integrationState.status = status;
     integrationState.reason = reason;
     if (warningKey && warningMessage) warnOnce(warningKey, warningMessage);
@@ -221,20 +254,26 @@ function getEntityName(entity: unknown, kind: EntityKind): string {
         const templateName = cprFlags?.template as { name?: string } | undefined;
         return templateName?.name ?? (entity as { name?: string })?.name ?? "template";
     }
-    return (entity as { name?: string })?.name ?? "region";
+    if (kind === "region") return (entity as { name?: string })?.name ?? "region";
+    // Effects and items: CPR keys their turn passes under 'combat' and dedups by
+    // the entity name (effect.name.slugify() / item.name). The result is slugified
+    // by the caller so overlapping same-name effects collapse to one fire.
+    return (entity as { name?: string })?.name ?? "combat";
 }
 
-function getEntityCastData(entity: unknown): { castLevel: number; saveDC: number } {
+function getEntityCastData(entity: unknown): {
+    castLevel: number;
+    saveDC: number;
+} {
     // CPR builds castData with -1 sentinels (see combat.js getSortedTriggers);
     // macros such as Hunger of Hadar read castData.castLevel and break on
     // undefined, so we normalise here rather than forwarding the raw flag.
-    const castData = (entity as { flags?: Record<string, Record<string, unknown>> })?.flags?.["chris-premades"]?.castData as
-        | { castLevel?: unknown; saveDC?: unknown }
-        | undefined;
+    const castData = (entity as { flags?: Record<string, Record<string, unknown>> })?.flags?.["chris-premades"]
+        ?.castData as { castLevel?: unknown; saveDC?: unknown } | undefined;
     const { castLevel, saveDC } = castData ?? {};
     return {
         castLevel: typeof castLevel === "number" && Number.isFinite(castLevel) ? castLevel : -1,
-        saveDC: typeof saveDC === "number" && Number.isFinite(saveDC) ? saveDC : -1
+        saveDC: typeof saveDC === "number" && Number.isFinite(saveDC) ? saveDC : -1,
     };
 }
 
@@ -245,11 +284,21 @@ function getEntityCastData(entity: unknown): { castLevel: number; saveDC: number
  * array of `{pass, macro, priority}`. Embedded (string) macros are intentionally
  * skipped — first-party spells use named exports.
  */
-function collectEntityTriggers(entity: unknown, kind: EntityKind, pass: TurnPass, tokenPlaceable: unknown, details: TurnDetails): EntityTriggerCandidate | null {
+function collectEntityTriggers(
+    entity: unknown,
+    kind: EntityKind,
+    pass: TurnPass,
+    tokenPlaceable: unknown,
+    details: TurnDetails,
+): EntityTriggerCandidate | null {
     const macros = getCprApi()?.macros;
     if (!macros) return null;
 
-    const flagMacros = (entity as { flags?: Record<string, Record<string, { template?: unknown[]; region?: unknown[] }>> })?.flags?.["chris-premades"]?.macros;
+    const flagMacros = (
+        entity as {
+            flags?: Record<string, Record<string, { template?: unknown[]; region?: unknown[]; combat?: unknown[] }>>;
+        }
+    )?.flags?.["chris-premades"]?.macros;
     const names = flagMacros?.[kind] ?? [];
     if (!Array.isArray(names) || names.length === 0) return null;
 
@@ -259,7 +308,11 @@ function collectEntityTriggers(entity: unknown, kind: EntityKind, pass: TurnPass
         const exportEntries = (macros[name]?.[kind] ?? []) as CprPassEntry[];
         for (const entry of exportEntries) {
             if (entry?.pass !== pass || typeof entry.macro !== "function") continue;
-            entries.push({ macro: entry.macro, priority: Number(entry.priority ?? 50), macroName: entry.macro.name || name });
+            entries.push({
+                macro: entry.macro,
+                priority: Number(entry.priority ?? 50),
+                macroName: entry.macro.name || name,
+            });
         }
     }
     if (entries.length === 0) return null;
@@ -270,7 +323,7 @@ function collectEntityTriggers(entity: unknown, kind: EntityKind, pass: TurnPass
         name: slugify(getEntityName(entity, kind)),
         castData: getEntityCastData(entity),
         macros: entries,
-        ...details
+        ...details,
     };
 }
 
@@ -293,9 +346,10 @@ function dedupeAndSort(candidates: EntityTriggerCandidate[]): SortedTrigger[] {
         const maxLevel = Math.max(...list.map((candidate) => candidate.castData.castLevel));
         const maxDC = Math.max(...list.map((candidate) => candidate.castData.saveDC));
         const maxDCCandidate = list.find((candidate) => candidate.castData.saveDC === maxDC) ?? list[0];
-        const winner = maxDCCandidate.castData.castLevel === maxLevel
-            ? maxDCCandidate
-            : list.find((candidate) => candidate.castData.castLevel === maxLevel) ?? maxDCCandidate;
+        const winner =
+            maxDCCandidate.castData.castLevel === maxLevel
+                ? maxDCCandidate
+                : (list.find((candidate) => candidate.castData.castLevel === maxLevel) ?? maxDCCandidate);
         for (const macro of winner.macros) {
             sorted.push({
                 entity: winner.entity,
@@ -308,7 +362,7 @@ function dedupeAndSort(candidates: EntityTriggerCandidate[]): SortedTrigger[] {
                 currentTurn: winner.currentTurn,
                 previousTurn: winner.previousTurn,
                 currentRound: winner.currentRound,
-                previousRound: winner.previousRound
+                previousRound: winner.previousRound,
             });
         }
     }
@@ -329,11 +383,36 @@ function getRegionsForToken(tokenDocument: TokenLike | null | undefined): unknow
     const regions = tokenDocument?.regions;
     if (!regions) return [];
     if (regions instanceof Set || Array.isArray(regions)) return Array.from(regions as Iterable<unknown>);
-    if (typeof (regions as { values?: unknown }).values === "function") return Array.from((regions as { values: () => Iterable<unknown> }).values());
+    if (typeof (regions as { values?: unknown }).values === "function")
+        return Array.from((regions as { values: () => Iterable<unknown> }).values());
     return [];
 }
 
-function collectTriggersForToken(tokenDocument: TokenLike | null | undefined, tokenPlaceable: unknown, pass: TurnPass, details: TurnDetails): SortedTrigger[] {
+/**
+ * Coerce an actor's embedded collection (`effects` or `items`) to a plain
+ * array. CPR iterates these for self-buff / feature combat macros. Foundry
+ * collections are iterable (with `.values()`); test mocks use plain arrays.
+ */
+function getActorCombatEntities(actor: ActorLike | null, kind: "effects" | "items"): unknown[] {
+    const collection = (actor as unknown as Record<string, unknown>)?.[kind] ?? null;
+    if (!collection) return [];
+    if (Array.isArray(collection)) return collection as unknown[];
+    if (collection instanceof Set) return Array.from(collection);
+    if (typeof (collection as { values?: unknown }).values === "function") {
+        return Array.from((collection as { values: () => Iterable<unknown> }).values());
+    }
+    if (typeof (collection as { [Symbol.iterator]?: unknown })[Symbol.iterator] === "function") {
+        return Array.from(collection as Iterable<unknown>);
+    }
+    return [];
+}
+
+function collectTriggersForToken(
+    tokenDocument: TokenLike | null | undefined,
+    tokenPlaceable: unknown,
+    pass: TurnPass,
+    details: TurnDetails,
+): SortedTrigger[] {
     const candidates: EntityTriggerCandidate[] = [];
     for (const template of getTemplatesForToken(tokenPlaceable)) {
         const candidate = collectEntityTriggers(template, "template", pass, tokenPlaceable, details);
@@ -343,12 +422,37 @@ function collectTriggersForToken(tokenDocument: TokenLike | null | undefined, to
         const candidate = collectEntityTriggers(region, "region", pass, tokenPlaceable, details);
         if (candidate) candidates.push(candidate);
     }
+    // Effects and items on the token's actor. CPR's collectTokenMacros gathers
+    // self-buff / feature combat macros from these (Blink's turnEnd/turnStart,
+    // Haste, Fly, per-turn condition recovery, class features, ...). Without
+    // this the bridge dropped every effect/item combat macro — since CPR's native
+    // updateCombat is suppressed for side combats, that meant Blink (and every
+    // similar spell/feature) never fired. kind 'combat' reads the same
+    // flags['chris-premades'].macros.combat shape collectEntityTriggers already
+    // understands for templates/regions.
+    const actor = tokenDocument?.actor ?? null;
+    for (const entity of getActorCombatEntities(actor, "effects")) {
+        const candidate = collectEntityTriggers(entity, "combat", pass, tokenPlaceable, details);
+        if (candidate) candidates.push(candidate);
+    }
+    for (const entity of getActorCombatEntities(actor, "items")) {
+        const candidate = collectEntityTriggers(entity, "combat", pass, tokenPlaceable, details);
+        if (candidate) candidates.push(candidate);
+    }
     return dedupeAndSort(candidates);
 }
 
-async function invokeTriggers(triggers: SortedTrigger[], ownerCombatantId: string | null = null, ownerPlaceableId: string | null = null): Promise<void> {
+async function invokeTriggers(
+    triggers: SortedTrigger[],
+    ownerCombatantId: string | null = null,
+    _ownerPlaceableId: string | null = null,
+): Promise<void> {
     for (const trigger of triggers) {
-        const triggerToken = trigger.token as { id?: string; uuid?: string; document?: { uuid?: string } } | null;
+        const triggerToken = trigger.token as {
+            id?: string;
+            uuid?: string;
+            document?: { uuid?: string };
+        } | null;
         const targetId = triggerToken?.id ?? triggerToken?.document?.uuid ?? triggerToken?.uuid ?? null;
         debug(`    -> macro=${trigger.macroName} owner=${ownerCombatantId} target=${targetId}`);
         try {
@@ -370,7 +474,10 @@ function getCombatTurnRef(combat: CombatLike | null | undefined, key: "current" 
  * `token.document.uuid`). Prefer the document's `.object`; fall back to the
  * canvas placeable, then the document itself. Returns `[document, placeable]`.
  */
-function resolveCombatantToken(combatant: CombatantLike | null | undefined): { document: TokenLike | null; placeable: unknown } {
+function resolveCombatantToken(combatant: CombatantLike | null | undefined): {
+    document: TokenLike | null;
+    placeable: unknown;
+} {
     const tokenDocument = combatant?.token ?? combatant?.tokenDocument ?? null;
     const canvasTokens = (globalThis as { canvas?: { tokens?: { get?(id: string): unknown } } }).canvas?.tokens;
     const placeable = tokenDocument?.object ?? canvasTokens?.get?.(tokenDocument?.id ?? "") ?? tokenDocument;
@@ -391,7 +498,10 @@ function enqueueWorkflowBatch(task: () => Promise<void>): void {
     workflowChain = workflowChain
         .catch(() => undefined)
         .then(task)
-        .then(() => undefined, (error) => debug("workflow batch rejected:", error));
+        .then(
+            () => undefined,
+            (error) => debug("workflow batch rejected:", error),
+        );
 }
 
 /**
@@ -412,11 +522,13 @@ async function firePassesForSide(combat: CombatLike, sideId: string, passes: rea
         currentTurn: current?.turn ?? -1,
         previousTurn: previous?.turn ?? -1,
         currentRound: current?.round ?? -1,
-        previousRound: previous?.round ?? -1
+        previousRound: previous?.round ?? -1,
     };
 
     debug(`bridge passes=[${passes.join(",")}] side=${sideId}`);
-    for (const combatant of getCombatantsForSide(combat, sideId, { includeDefeated: false })) {
+    for (const combatant of getCombatantsForSide(combat, sideId, {
+        includeDefeated: false,
+    })) {
         const { document: tokenDocument, placeable: tokenPlaceable } = resolveCombatantToken(combatant);
         const combatantId = combatant?.id ?? null;
         const tokenId = (combatant as { tokenId?: string } | null)?.tokenId ?? "?";
@@ -427,7 +539,9 @@ async function firePassesForSide(combat: CombatLike, sideId: string, passes: rea
         // point at; doc.id is what `combatant.token` resolved to; placeable.doc.uuid
         // is what syntheticActivityRoll will actually target. A mismatch here
         // (e.g. after a commander switch) reveals a stale token reference.
-        debug(`  combatant=${combatantId} tokenId=${tokenId} token.id=${docId} placeable.id=${placeableId} placeable.doc.uuid=${placeableUuid}`);
+        debug(
+            `  combatant=${combatantId} tokenId=${tokenId} token.id=${docId} placeable.id=${placeableId} placeable.doc.uuid=${placeableUuid}`,
+        );
         if (!tokenPlaceable) {
             debug(`  combatant=${combatantId} SKIP (no token placeable)`);
             continue;
@@ -435,7 +549,9 @@ async function firePassesForSide(combat: CombatLike, sideId: string, passes: rea
         for (const pass of passes) {
             const triggers = collectTriggersForToken(tokenDocument, tokenPlaceable, pass, details);
             if (triggers.length === 0) continue;
-            debug(`  combatant=${combatantId} placeable=${placeableId} pass=${pass} firing ${triggers.length} trigger(s) -> targets ${placeableUuid}`);
+            debug(
+                `  combatant=${combatantId} placeable=${placeableId} pass=${pass} firing ${triggers.length} trigger(s) -> targets ${placeableUuid}`,
+            );
             // Await each macro so the next workflow only starts once this one
             // (rolls + damage) has completed.
             await invokeTriggers(triggers, combatantId, placeableId);
@@ -455,8 +571,12 @@ function bridgeSideTurn(payload: SideTurnPayload, passes: readonly TurnPass[]): 
 function registerSideTurnBridge(): void {
     if (integrationState.bridgeRegistered) return;
     integrationState.bridgeRegistered = true;
-    hooks()?.on("side-initiative.sideTurnStart", (payload: SideTurnPayload) => bridgeSideTurn(payload ?? {}, ["turnStart", "everyTurn"]));
-    hooks()?.on("side-initiative.sideTurnEnd", (payload: SideTurnPayload) => bridgeSideTurn(payload ?? {}, ["turnEnd"]));
+    hooks()?.on("side-initiative.sideTurnStart", (payload: SideTurnPayload) =>
+        bridgeSideTurn(payload ?? {}, ["turnStart", "everyTurn"]),
+    );
+    hooks()?.on("side-initiative.sideTurnEnd", (payload: SideTurnPayload) =>
+        bridgeSideTurn(payload ?? {}, ["turnEnd"]),
+    );
     // Await the turnEnd batch before the turn advances (registered with the API's
     // side-turn-end flusher registry; see emitSideTurnEndHook in api.ts).
     registerSideTurnEndFlusher(flushCprBridge);
@@ -514,12 +634,20 @@ function wrapCprUpdateCombat(): boolean {
         if (!isCprUpdateCombatSource(fn)) continue;
 
         const original = fn as (...args: unknown[]) => unknown;
-        const wrapped = async function cprUpdateCombatGuard(this: unknown, combat: unknown, ...rest: unknown[]): Promise<unknown> {
+        const wrapped = async function cprUpdateCombatGuard(
+            this: unknown,
+            combat: unknown,
+            ...rest: unknown[]
+        ): Promise<unknown> {
             if (shouldSuppressCprUpdateCombat(combat as CombatLike | null)) {
-                debug(`CPR updateCombat SUPPRESSED (within-side switch) prev=${getCombatTurnRef(combat as CombatLike | null, "previous")?.combatantId ?? null} cur=${getCombatTurnRef(combat as CombatLike | null, "current")?.combatantId ?? null}`);
+                debug(
+                    `CPR updateCombat SUPPRESSED (within-side switch) prev=${getCombatTurnRef(combat as CombatLike | null, "previous")?.combatantId ?? null} cur=${getCombatTurnRef(combat as CombatLike | null, "current")?.combatantId ?? null}`,
+                );
                 return undefined;
             }
-            debug(`CPR updateCombat native (cross-side/round) prev=${getCombatTurnRef(combat as CombatLike | null, "previous")?.combatantId ?? null} cur=${getCombatTurnRef(combat as CombatLike | null, "current")?.combatantId ?? null}`);
+            debug(
+                `CPR updateCombat native (cross-side/round) prev=${getCombatTurnRef(combat as CombatLike | null, "previous")?.combatantId ?? null} cur=${getCombatTurnRef(combat as CombatLike | null, "current")?.combatantId ?? null}`,
+            );
             return original.call(this, combat, ...rest);
         };
         if (typeof entry === "function") {
@@ -564,7 +692,9 @@ function shouldApplySideTurnSemantics(): boolean {
  */
 function resolveTokenPlaceable(tokenId: unknown): unknown {
     if (typeof tokenId !== "string" || !tokenId) return null;
-    return (globalThis as { canvas?: { tokens?: { get?(id: string): unknown } } }).canvas?.tokens?.get?.(tokenId) ?? null;
+    return (
+        (globalThis as { canvas?: { tokens?: { get?(id: string): unknown } } }).canvas?.tokens?.get?.(tokenId) ?? null
+    );
 }
 
 /**
@@ -640,7 +770,11 @@ function wrapCprCombatUtils(): boolean {
     const originalIsOwnTurn = combatUtils.isOwnTurn;
     const originalPerTurnCheck = combatUtils.perTurnCheck;
     const originalGetCurrentCombatantToken = combatUtils.getCurrentCombatantToken;
-    if (typeof originalIsOwnTurn !== "function" || typeof originalPerTurnCheck !== "function" || typeof originalGetCurrentCombatantToken !== "function") {
+    if (
+        typeof originalIsOwnTurn !== "function" ||
+        typeof originalPerTurnCheck !== "function" ||
+        typeof originalGetCurrentCombatantToken !== "function"
+    ) {
         return false;
     }
 
@@ -651,7 +785,13 @@ function wrapCprCombatUtils(): boolean {
         return Boolean((originalIsOwnTurn as (token: unknown) => unknown).call(this, token));
     };
 
-    combatUtils.perTurnCheck = function perTurnCheckSideInitiative(this: unknown, entity: unknown, name: unknown, ownTurnOnly: unknown, tokenId: unknown): boolean {
+    combatUtils.perTurnCheck = function perTurnCheckSideInitiative(
+        this: unknown,
+        entity: unknown,
+        name: unknown,
+        ownTurnOnly: unknown,
+        tokenId: unknown,
+    ): boolean {
         if (shouldApplySideTurnSemantics() && ownTurnOnly) {
             const token = resolveTokenPlaceable(tokenId);
             if (token) {
@@ -660,10 +800,14 @@ function wrapCprCombatUtils(): boolean {
                 // On the active side → satisfy the ownTurnOnly gate, then run CPR's
                 // per-entity once-per-turn check (ownTurnOnly=false skips the literal
                 // current-combatant comparison but keeps the currentTurn() dedup).
-                return Boolean((originalPerTurnCheck as (...args: unknown[]) => unknown).call(this, entity, name, false, tokenId));
+                return Boolean(
+                    (originalPerTurnCheck as (...args: unknown[]) => unknown).call(this, entity, name, false, tokenId),
+                );
             }
         }
-        return Boolean((originalPerTurnCheck as (...args: unknown[]) => unknown).call(this, entity, name, ownTurnOnly, tokenId));
+        return Boolean(
+            (originalPerTurnCheck as (...args: unknown[]) => unknown).call(this, entity, name, ownTurnOnly, tokenId),
+        );
     };
 
     combatUtils.getCurrentCombatantToken = function getCurrentCombatantTokenSideInitiative(this: unknown): unknown {
@@ -681,9 +825,11 @@ function wrapCprCombatUtils(): boolean {
 
 /**
  * Register the Chris' Premades compatibility bridge: fire CPR `turnStart`/
- * `turnEnd` template and region macro passes for every non-commander token on the
- * active side so area spells (Hunger of Hadar, Wall of Fire, ...) affect all
- * tokens, not just the commander.
+ * `turnEnd`/`everyTurn` macro passes for every token on the active side. The
+ * passes cover templates, regions, the actor's effects, and the actor's items —
+ * so area spells (Hunger of Hadar, Wall of Fire, ...) and self-buff / feature
+ * spells (Blink, Haste, Fly, ...) all fire for every token, not just the
+ * commander.
  */
 export function registerChrisPremadesIntegration(): void {
     if (!getCprModule()?.active) return;
@@ -716,7 +862,7 @@ export function registerChrisPremadesIntegration(): void {
                 "unsupported",
                 "Chris' Premades API shape is not supported.",
                 "cpr-shape-mismatch",
-                "Side Initiative: Chris' Premades area triggers are disabled because the installed Chris' Premades API is not supported."
+                "Side Initiative: Chris' Premades area triggers are disabled because the installed Chris' Premades API is not supported.",
             );
         }
     });

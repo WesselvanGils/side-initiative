@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import {
     getLegendaryCombatantsToRecover,
     registerDnd5eIntegration,
-    shouldSuppressNativeRecovery
+    shouldSuppressNativeRecovery,
 } from "../src/integration/dnd5e.js";
 
 interface ActorOptions {
@@ -18,11 +18,8 @@ function createActor({ id, legactValue, legactMax }: ActorOptions): any {
         uuid: `${id}-uuid`,
         name: id,
         system: {
-            resources:
-                legactMax == null
-                    ? {}
-                    : { legact: { value: legactValue ?? legactMax, max: legactMax } }
-        }
+            resources: legactMax == null ? {} : { legact: { value: legactValue ?? legactMax, max: legactMax } },
+        },
     };
 }
 
@@ -31,7 +28,7 @@ function createCombatant({
     sideId,
     actor,
     defeated = false,
-    recoverCombatUses
+    recoverCombatUses,
 }: {
     id: string;
     sideId: string;
@@ -47,7 +44,7 @@ function createCombatant({
             if (scope === "side-initiative" && key === "sideId") return sideId;
             return null;
         },
-        recoverCombatUses
+        recoverCombatUses,
     };
 }
 
@@ -62,7 +59,7 @@ function createCombat(combatants: any[], activeSideId: string, started = true): 
                 return { activeSideId, order: [activeSideId], sides: {}, commanderIds: {} };
             }
             return null;
-        }
+        },
     };
 }
 
@@ -72,10 +69,12 @@ function createHooks() {
         on(name: string, handler: (...args: unknown[]) => unknown) {
             (registry.get(name) ?? registry.set(name, []).get(name)!).push(handler);
         },
-        once() { /* not used */ },
+        once() {
+            /* not used */
+        },
         get(name: string) {
             return registry.get(name) ?? [];
-        }
+        },
     };
 }
 
@@ -86,14 +85,17 @@ function installGlobals({ combat, primaryGM = true }: { combat?: any; primaryGM?
     globalThis.game = {
         combat,
         user: { id: primaryGM ? "gm-1" : "other", isGM: true },
-        users: { activeGM: { id: "gm-1", isGM: true, active: true }, contents: [{ id: "gm-1", isGM: true, active: true }] }
+        users: {
+            activeGM: { id: "gm-1", isGM: true, active: true },
+            contents: [{ id: "gm-1", isGM: true, active: true }],
+        },
     } as never;
     return {
         hooks,
         restore() {
             globalThis.game = original.game;
             globalThis.Hooks = original.Hooks;
-        }
+        },
     };
 }
 
@@ -104,13 +106,30 @@ function installGlobals({ combat, primaryGM = true }: { combat?: any; primaryGM?
 test("getLegendaryCombatantsToRecover returns only depleted legendary creatures on the side", () => {
     const combat = createCombat(
         [
-            createCombatant({ id: "npc-depleted", sideId: "monsters", actor: createActor({ id: "a", legactValue: 0, legactMax: 3 }) }),
-            createCombatant({ id: "npc-full", sideId: "monsters", actor: createActor({ id: "b", legactValue: 3, legactMax: 3 }) }),
+            createCombatant({
+                id: "npc-depleted",
+                sideId: "monsters",
+                actor: createActor({ id: "a", legactValue: 0, legactMax: 3 }),
+            }),
+            createCombatant({
+                id: "npc-full",
+                sideId: "monsters",
+                actor: createActor({ id: "b", legactValue: 3, legactMax: 3 }),
+            }),
             createCombatant({ id: "npc-none", sideId: "monsters", actor: createActor({ id: "c" }) }),
-            createCombatant({ id: "npc-defeated", sideId: "monsters", actor: createActor({ id: "d", legactValue: 0, legactMax: 3 }), defeated: true }),
-            createCombatant({ id: "npc-otherside", sideId: "players", actor: createActor({ id: "e", legactValue: 0, legactMax: 3 }) })
+            createCombatant({
+                id: "npc-defeated",
+                sideId: "monsters",
+                actor: createActor({ id: "d", legactValue: 0, legactMax: 3 }),
+                defeated: true,
+            }),
+            createCombatant({
+                id: "npc-otherside",
+                sideId: "players",
+                actor: createActor({ id: "e", legactValue: 0, legactMax: 3 }),
+            }),
         ],
-        "monsters"
+        "monsters",
     );
 
     const result = getLegendaryCombatantsToRecover(combat, "monsters").map((c) => c.id);
@@ -119,9 +138,15 @@ test("getLegendaryCombatantsToRecover returns only depleted legendary creatures 
 
 test("getLegendaryCombatantsToRecover is empty before combat starts", () => {
     const combat = createCombat(
-        [createCombatant({ id: "npc-1", sideId: "monsters", actor: createActor({ id: "a", legactValue: 0, legactMax: 3 }) })],
+        [
+            createCombatant({
+                id: "npc-1",
+                sideId: "monsters",
+                actor: createActor({ id: "a", legactValue: 0, legactMax: 3 }),
+            }),
+        ],
         "monsters",
-        false
+        false,
     );
     assert.equal(getLegendaryCombatantsToRecover(combat, "monsters").length, 0);
 });
@@ -162,16 +187,20 @@ test("sideTurnStart calls dnd5e's recoverCombatUses for depleted legendary creat
                 id: "npc-1",
                 sideId: "monsters",
                 actor: createActor({ id: "aboleth", legactValue: 0, legactMax: 3 }),
-                recoverCombatUses: async (periods) => { recoverCalls.push({ id: "npc-1", periods }); }
+                recoverCombatUses: async (periods) => {
+                    recoverCalls.push({ id: "npc-1", periods });
+                },
             }),
             createCombatant({
                 id: "npc-2",
                 sideId: "monsters",
                 actor: createActor({ id: "dragon", legactValue: 3, legactMax: 3 }),
-                recoverCombatUses: async (periods) => { recoverCalls.push({ id: "npc-2", periods }); }
-            })
+                recoverCombatUses: async (periods) => {
+                    recoverCalls.push({ id: "npc-2", periods });
+                },
+            }),
         ],
-        "monsters"
+        "monsters",
     );
 
     const env = installGlobals({ combat });
@@ -195,10 +224,12 @@ test("sideTurnStart does nothing on a non-primary-GM client", async () => {
                 id: "npc-1",
                 sideId: "monsters",
                 actor: createActor({ id: "aboleth", legactValue: 0, legactMax: 3 }),
-                recoverCombatUses: async () => { recoverCalls.push("npc-1"); }
-            })
+                recoverCombatUses: async () => {
+                    recoverCalls.push("npc-1");
+                },
+            }),
         ],
-        "monsters"
+        "monsters",
     );
 
     const env = installGlobals({ combat, primaryGM: false });

@@ -22,7 +22,7 @@ function makeCombatant(options: CombatantOptions): Record<string, unknown> {
         getFlag(scope: string, key: string) {
             if (scope === "side-initiative" && key === "sideId") return sideId;
             return undefined;
-        }
+        },
     };
 }
 
@@ -49,11 +49,11 @@ function makeCombat(combatants: Array<Record<string, unknown>>, options: CombatO
                     activeSideId: options.activeSideId ?? null,
                     order: options.order ?? ["players", "monsters"],
                     sides: {},
-                    commanderIds: options.commanderIds ?? {}
+                    commanderIds: options.commanderIds ?? {},
                 };
             }
             return undefined;
-        }
+        },
     };
 }
 
@@ -61,9 +61,9 @@ test("getDockState maps players to the left and monsters to the right with the a
     const combat = makeCombat(
         [
             makeCombatant({ id: "pc-1", sideId: "players", img: "pc1.png" }),
-            makeCombatant({ id: "npc-1", sideId: "monsters", img: "npc1.png" })
+            makeCombatant({ id: "npc-1", sideId: "monsters", img: "npc1.png" }),
         ],
-        { activeSideId: "players" }
+        { activeSideId: "players" },
     );
 
     const state = getDockState(combat);
@@ -87,11 +87,8 @@ test("getDockState maps players to the left and monsters to the right with the a
 
 test("getDockState flags the right panel when monsters are the active side", () => {
     const combat = makeCombat(
-        [
-            makeCombatant({ id: "pc-1", sideId: "players" }),
-            makeCombatant({ id: "npc-1", sideId: "monsters" })
-        ],
-        { activeSideId: "monsters" }
+        [makeCombatant({ id: "pc-1", sideId: "players" }), makeCombatant({ id: "npc-1", sideId: "monsters" })],
+        { activeSideId: "monsters" },
     );
 
     const state = getDockState(combat);
@@ -107,9 +104,9 @@ test("getDockState highlights the divider when the active side is neither player
         [
             makeCombatant({ id: "pc-1", sideId: "players" }),
             makeCombatant({ id: "ally-1", sideId: "allies" }),
-            makeCombatant({ id: "npc-1", sideId: "monsters" })
+            makeCombatant({ id: "npc-1", sideId: "monsters" }),
         ],
-        { activeSideId: "allies" }
+        { activeSideId: "allies" },
     );
 
     const state = getDockState(combat);
@@ -124,9 +121,9 @@ test("getDockState resolves a configured commander as the side representative", 
     const combat = makeCombat(
         [
             makeCombatant({ id: "pc-1", sideId: "players", img: "pc1.png" }),
-            makeCombatant({ id: "pc-2", sideId: "players", img: "pc2.png" })
+            makeCombatant({ id: "pc-2", sideId: "players", img: "pc2.png" }),
         ],
-        { activeSideId: "players", commanderIds: { players: "pc-2" } }
+        { activeSideId: "players", commanderIds: { players: "pc-2" } },
     );
 
     const state = getDockState(combat);
@@ -136,10 +133,9 @@ test("getDockState resolves a configured commander as the side representative", 
 });
 
 test("getDockState falls back to the actor image when the token image is missing", () => {
-    const combat = makeCombat(
-        [makeCombatant({ id: "pc-1", sideId: "players", img: null, actorImg: "actor.png" })],
-        { activeSideId: "players" }
-    );
+    const combat = makeCombat([makeCombatant({ id: "pc-1", sideId: "players", img: null, actorImg: "actor.png" })], {
+        activeSideId: "players",
+    });
 
     const state = getDockState(combat);
 
@@ -147,10 +143,9 @@ test("getDockState falls back to the actor image when the token image is missing
 });
 
 test("getDockState marks a panel empty when its side has no representatives", () => {
-    const combat = makeCombat(
-        [makeCombatant({ id: "pc-1", sideId: "players", img: "pc1.png" })],
-        { activeSideId: "players" }
-    );
+    const combat = makeCombat([makeCombatant({ id: "pc-1", sideId: "players", img: "pc1.png" })], {
+        activeSideId: "players",
+    });
 
     const state = getDockState(combat);
 
@@ -162,11 +157,8 @@ test("getDockState marks a panel empty when its side has no representatives", ()
 
 test("getDockState is hidden when the feature is disabled", () => {
     const combat = makeCombat(
-        [
-            makeCombatant({ id: "pc-1", sideId: "players" }),
-            makeCombatant({ id: "npc-1", sideId: "monsters" })
-        ],
-        { activeSideId: "players" }
+        [makeCombatant({ id: "pc-1", sideId: "players" }), makeCombatant({ id: "npc-1", sideId: "monsters" })],
+        { activeSideId: "players" },
     );
 
     const state = getDockState(combat, { enabled: false });
@@ -177,7 +169,7 @@ test("getDockState is hidden when the feature is disabled", () => {
 test("getDockState is visible as soon as a combat exists, even before sides are rolled", () => {
     const combatants = [
         makeCombatant({ id: "pc-1", sideId: "players" }),
-        makeCombatant({ id: "npc-1", sideId: "monsters" })
+        makeCombatant({ id: "npc-1", sideId: "monsters" }),
     ];
     const map = new Map(combatants.map((combatant) => [combatant.id as string, combatant]));
     const combat = {
@@ -189,7 +181,7 @@ test("getDockState is visible as soon as a combat exists, even before sides are 
         turns: combatants,
         getFlag() {
             return undefined;
-        }
+        },
     };
 
     const state = getDockState(combat);
@@ -200,11 +192,8 @@ test("getDockState is visible as soon as a combat exists, even before sides are 
 
 test("getDockState reports the round and started flag from the combat", () => {
     const combat = makeCombat(
-        [
-            makeCombatant({ id: "pc-1", sideId: "players" }),
-            makeCombatant({ id: "npc-1", sideId: "monsters" })
-        ],
-        { activeSideId: "monsters", round: 4, started: false }
+        [makeCombatant({ id: "pc-1", sideId: "players" }), makeCombatant({ id: "npc-1", sideId: "monsters" })],
+        { activeSideId: "monsters", round: 4, started: false },
     );
 
     const state = getDockState(combat);
@@ -214,8 +203,14 @@ test("getDockState reports the round and started flag from the combat", () => {
 });
 
 test("resolveCombatantImg prefers the actor (avatar) image then the token image", () => {
-    assert.equal(resolveCombatantImg(makeCombatant({ id: "a", sideId: "players", img: "token.png", actorImg: "actor.png" })), "actor.png");
-    assert.equal(resolveCombatantImg(makeCombatant({ id: "a", sideId: "players", img: "token.png", actorImg: null })), "token.png");
+    assert.equal(
+        resolveCombatantImg(makeCombatant({ id: "a", sideId: "players", img: "token.png", actorImg: "actor.png" })),
+        "actor.png",
+    );
+    assert.equal(
+        resolveCombatantImg(makeCombatant({ id: "a", sideId: "players", img: "token.png", actorImg: null })),
+        "token.png",
+    );
     assert.equal(resolveCombatantImg(makeCombatant({ id: "a", sideId: "players", img: null, actorImg: null })), null);
     assert.equal(resolveCombatantImg(null), null);
 });
@@ -224,14 +219,14 @@ test("getDockState uses the primary party art for the players panel when enabled
     const combat = makeCombat(
         [
             makeCombatant({ id: "pc-1", sideId: "players", img: "commander.png" }),
-            makeCombatant({ id: "npc-1", sideId: "monsters", img: "monster.png" })
+            makeCombatant({ id: "npc-1", sideId: "monsters", img: "monster.png" }),
         ],
-        { activeSideId: "players" }
+        { activeSideId: "players" },
     );
 
     const state = getDockState(combat, {
         usePrimaryPartyArt: true,
-        primaryParty: { img: "party.png", name: "The Brave" }
+        primaryParty: { img: "party.png", name: "The Brave" },
     });
 
     assert.equal(state.left?.img, "party.png");
@@ -241,10 +236,9 @@ test("getDockState uses the primary party art for the players panel when enabled
 });
 
 test("getDockState falls back to the commander when primary party art is unavailable", () => {
-    const combat = makeCombat(
-        [makeCombatant({ id: "pc-1", sideId: "players", img: "commander.png" })],
-        { activeSideId: "players" }
-    );
+    const combat = makeCombat([makeCombatant({ id: "pc-1", sideId: "players", img: "commander.png" })], {
+        activeSideId: "players",
+    });
 
     const withParty = getDockState(combat, { usePrimaryPartyArt: true, primaryParty: null });
     assert.equal(withParty.left?.img, "commander.png");
@@ -254,14 +248,13 @@ test("getDockState falls back to the commander when primary party art is unavail
 });
 
 test("getDockState ignores the primary party when the setting is off", () => {
-    const combat = makeCombat(
-        [makeCombatant({ id: "pc-1", sideId: "players", img: "commander.png" })],
-        { activeSideId: "players" }
-    );
+    const combat = makeCombat([makeCombatant({ id: "pc-1", sideId: "players", img: "commander.png" })], {
+        activeSideId: "players",
+    });
 
     const state = getDockState(combat, {
         usePrimaryPartyArt: false,
-        primaryParty: { img: "party.png", name: "The Brave" }
+        primaryParty: { img: "party.png", name: "The Brave" },
     });
 
     assert.equal(state.left?.img, "commander.png");
@@ -273,24 +266,35 @@ test("resolvePrimaryPartyArt reads the dnd5e primary party setting and falls bac
     // dnd5e active, primary party resolves to a group actor with art.
     globalThis.game = {
         system: { id: "dnd5e" },
-        settings: { get(scope, key) {
-            if (scope === "dnd5e" && key === "primaryParty") return { actor: { img: "party.png", name: "The Brave" } };
-            return null;
-        } }
+        settings: {
+            get(scope, key) {
+                if (scope === "dnd5e" && key === "primaryParty")
+                    return { actor: { img: "party.png", name: "The Brave" } };
+                return null;
+            },
+        },
     } as never;
     assert.deepEqual(resolvePrimaryPartyArt(), { img: "party.png", name: "The Brave" });
 
     // `.actor` may be a lazy getter function returning the actor.
     globalThis.game = {
         system: { id: "dnd5e" },
-        settings: { get() { return { actor: () => ({ img: "lazy.png", name: "Lazy" }) }; } }
+        settings: {
+            get() {
+                return { actor: () => ({ img: "lazy.png", name: "Lazy" }) };
+            },
+        },
     } as never;
     assert.deepEqual(resolvePrimaryPartyArt(), { img: "lazy.png", name: "Lazy" });
 
     // No party set.
     globalThis.game = {
         system: { id: "dnd5e" },
-        settings: { get() { return null; } }
+        settings: {
+            get() {
+                return null;
+            },
+        },
     } as never;
     assert.equal(resolvePrimaryPartyArt(), null);
 
@@ -298,7 +302,12 @@ test("resolvePrimaryPartyArt reads the dnd5e primary party setting and falls bac
     let touched = false;
     globalThis.game = {
         system: { id: "pf2e" },
-        settings: { get() { touched = true; return null; } }
+        settings: {
+            get() {
+                touched = true;
+                return null;
+            },
+        },
     } as never;
     assert.equal(resolvePrimaryPartyArt(), null);
     assert.equal(touched, false);
