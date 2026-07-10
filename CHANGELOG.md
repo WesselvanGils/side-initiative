@@ -2,12 +2,22 @@
 
 ### 🐛 Bug Fixes
 
+- *(cpr)* Expanded CPR calls to include spells like blink
+
+### 📚 Documentation
+
+- Added an AGENTS.md with guidelines for AI tools
+## [1.3.1] - 2026-06-26
+
+### 🐛 Bug Fixes
+
 - *(cpr)* On attack triggers such as smites now work
 - Players now have proper permissions configured
 
 ### 📚 Documentation
 
 - Todo list
+- *(changelog)* Update changelog
 ## [1.3.0] - 2026-06-21
 
 ### 🚀 Features
