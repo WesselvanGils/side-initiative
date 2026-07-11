@@ -79,12 +79,21 @@ test("buildPayloadFromManifest derives version and URLs from the staged manifest
     assert.deepEqual(payload, {
         id: "side-initiative",
         release: {
-            version: "1.2.3",
+            version: "v1.2.3",
             manifest: "https://github.com/WesselvanGils/side-initiative/releases/download/v1.2.3/module.json",
             notes: "https://github.com/WesselvanGils/side-initiative/releases/tag/v1.2.3",
             compatibility: { minimum: "13", verified: "13", maximum: "" },
         },
     });
+});
+
+test("buildPayloadFromManifest publishes the version with the v prefix even when the tag omits it", () => {
+    // Foundry sorts its version list as strings, so the release version must
+    // carry the same v prefix as prior manual releases (bare "1.2.3" sorts to
+    // the bottom). module.json keeps the bare semver; only the published label
+    // is the tag form.
+    const payload = buildPayloadFromManifest(STAGED_MANIFEST, "1.2.3") as { release: { version: string } };
+    assert.equal(payload.release.version, "v1.2.3");
 });
 
 test("buildPayloadFromManifest rejects a manifest with the wrong id", () => {

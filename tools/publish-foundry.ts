@@ -222,7 +222,7 @@ export function buildPayloadFromManifest(
     tag: string,
     options: { dryRun?: boolean } = {},
 ): Record<string, unknown> {
-    const { tagName, version } = normalizeReleaseTag(tag);
+    const { tagName } = normalizeReleaseTag(tag);
     if (manifest.id !== MODULE_ID) {
         throw new Error(`Expected staged manifest id to be "${MODULE_ID}", got "${manifest.id ?? ""}".`);
     }
@@ -230,7 +230,7 @@ export function buildPayloadFromManifest(
     const { manifest: manifestUrl, notes } = buildReleaseUrls({ repositoryBaseUrl, tagName });
     return buildFoundryReleasePayload({
         id: MODULE_ID,
-        version,
+        version: tagName,
         manifest: manifestUrl,
         notes,
         compatibility: readCompatibility(manifest.compatibility),
