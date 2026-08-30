@@ -896,7 +896,30 @@ export function getCombatantFromWorkflow(workflow: WorkflowLike | null | undefin
  */
 export async function setCombatState(combat: CombatLike | null | undefined, state: CombatState): Promise<unknown> {
     const nextState = normalizeCombatState(state);
-    return combat?.setFlag?.(FLAG_SCOPE, SIDE_STATE_FLAG, nextState);
+    if (!combat?.setFlag) return undefined;
+
+    const currentState = combat.getFlag?.(FLAG_SCOPE, SIDE_STATE_FLAG);
+    if (combat.unsetFlag && hasRemovedObjectKeys(currentState, nextState)) {
+        await combat.unsetFlag(FLAG_SCOPE, SIDE_STATE_FLAG);
+    }
+
+    return combat.setFlag(FLAG_SCOPE, SIDE_STATE_FLAG, nextState);
+}
+
+/**
+ * Foundry recursively merges objects passed to `setFlag`, so omitted nested
+ * keys survive unless the flag is cleared first. Detect those removals before
+ * saving to keep side membership and commander maps exact.
+ */
+function hasRemovedObjectKeys(current: unknown, next: unknown): boolean {
+    if (!current || typeof current !== "object" || Array.isArray(current)) return false;
+    if (!next || typeof next !== "object" || Array.isArray(next)) return true;
+
+    const currentRecord = current as Record<string, unknown>;
+    const nextRecord = next as Record<string, unknown>;
+    return Object.keys(currentRecord).some(
+        (key) => !(key in nextRecord) || hasRemovedObjectKeys(currentRecord[key], nextRecord[key]),
+    );
 }
 
 /**

@@ -1,4 +1,5 @@
 import { getCombatantsForSide, isSideCombat } from "../logic.js";
+import { registerSideTurnStartFlusher } from "../api.js";
 import { hooks, isPrimaryGMClient } from "../runtime.js";
 import type { ActorLike, CombatLike, CombatantLike, SideTurnPayload } from "../types.js";
 
@@ -36,6 +37,18 @@ interface LegactResource {
 
 /** Reentrancy guard: true while we are driving recovery from `sideTurnStart`. */
 let sideTurnRecoveryInProgress = false;
+let pendingSideTurnStart: Promise<void> = Promise.resolve();
+
+function handleSideTurnStart({ combat, sideId }: SideTurnPayload = {}): Promise<void> {
+    pendingSideTurnStart = isPrimaryGMClient()
+        ? recoverLegendaryActionsForSide(combat ?? null, sideId ?? null)
+        : Promise.resolve();
+    return pendingSideTurnStart;
+}
+
+function flushSideTurnStart(): Promise<void> {
+    return pendingSideTurnStart;
+}
 
 function resolveActor(combatant: CombatantLike | null | undefined): ActorLike | null {
     return combatant?.actor ?? combatant?.document?.actor ?? combatant?.token?.actor ?? null;
@@ -115,10 +128,8 @@ async function recoverLegendaryActionsForSide(
  *  - suppress dnd5e's native end-of-turn recovery for side combats.
  */
 export function registerDnd5eIntegration(): void {
-    hooks()?.on("side-initiative.sideTurnStart", async ({ combat, sideId }: SideTurnPayload = {}) => {
-        if (!isPrimaryGMClient()) return;
-        await recoverLegendaryActionsForSide(combat ?? null, sideId ?? null);
-    });
+    hooks()?.on("side-initiative.sideTurnStart", handleSideTurnStart);
+    registerSideTurnStartFlusher(flushSideTurnStart);
     hooks()?.on("dnd5e.preCombatRecovery", (combatant: CombatantLike, periods: unknown): boolean | void => {
         if (shouldSuppressNativeRecovery(combatant, periods, sideTurnRecoveryInProgress)) return false;
     });

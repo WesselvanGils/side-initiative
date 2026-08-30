@@ -1,0 +1,13 @@
+{
+  "runs": [
+    {
+      "date": "2026-07-11T10:43:27.930637+00:00",
+      "input_tokens": 183300,
+      "output_tokens": 0,
+      "files": 45,
+      "usage_note": "Agent surface exposed rounded total usage only; recorded conservatively as input."
+    }
+  ],
+  "total_input_tokens": 183300,
+  "total_output_tokens": 0
+}

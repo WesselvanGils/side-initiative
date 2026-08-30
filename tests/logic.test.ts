@@ -2,8 +2,10 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {
     clearSideTurnEndFlushers,
+    clearSideTurnStartFlushers,
     getRoundTimeDelta,
     registerSideTurnEndFlusher,
+    registerSideTurnStartFlusher,
     SideInitiativeAPI,
 } from "../src/api.js";
 import {
@@ -805,6 +807,124 @@ test("advanceSide awaits sideTurnEnd flushers before the turn advances (combat.u
         globalThis.Hooks = originalHooks;
         combat.update = originalUpdate;
     }
+});
+
+test("advanceSide awaits sideTurnStart flushers before resolving", async () => {
+    const p1 = createCombatant({
+        id: "pc-1",
+        hasPlayerOwner: true,
+        disposition: 1,
+    });
+    const m1 = createCombatant({
+        id: "npc-1",
+        hasPlayerOwner: false,
+        disposition: -1,
+    });
+    const combat = createCombat(
+        [p1, m1],
+        {
+            activeSideId: "players",
+            order: ["players", "monsters"],
+            sides: {
+                players: { id: "players", combatantIds: ["pc-1"] },
+                monsters: { id: "monsters", combatantIds: ["npc-1"] },
+            },
+        } as any,
+        [p1, m1],
+    );
+
+    const events: string[] = [];
+    const originalHooks = (globalThis as any).Hooks;
+    (globalThis as any).Hooks = {
+        callAll(name: string) {
+            events.push(`hook:${name}`);
+        },
+    };
+
+    const flusher = async () => {
+        await new Promise((resolve) => setTimeout(resolve, 5));
+        events.push("start-flusher-done");
+    };
+    registerSideTurnStartFlusher(flusher);
+
+    try {
+        await SideInitiativeAPI.advanceSide(combat, 1);
+        events.push("advance-resolved");
+
+        const startHookAt = events.indexOf("hook:side-initiative.sideTurnStart");
+        const flusherAt = events.indexOf("start-flusher-done");
+        const resolvedAt = events.indexOf("advance-resolved");
+        assert.notEqual(startHookAt, -1, "start hook did not fire");
+        assert.ok(startHookAt < flusherAt, `expected the hook before its flusher, got [${events.join(", ")}]`);
+        assert.ok(flusherAt < resolvedAt, `expected the flusher before API resolution, got [${events.join(", ")}]`);
+    } finally {
+        clearSideTurnStartFlushers();
+        (globalThis as any).Hooks = originalHooks;
+    }
+});
+
+test("refreshCombatantSides removes stale nested side state from Foundry flags", async () => {
+    const player = createCombatant({
+        id: "pc-1",
+        sideId: "players",
+        sideSource: "manual",
+    });
+    const movedAlly = createCombatant({
+        id: "ally-1",
+        sideId: "players",
+        sideSource: "manual",
+    });
+    const monster = createCombatant({
+        id: "npc-1",
+        sideId: "monsters",
+        sideSource: "manual",
+    });
+    let persisted: any = {
+        version: 2,
+        order: ["players", "neutral", "monsters"],
+        sides: {
+            players: { id: "players", combatantIds: ["pc-1"] },
+            neutral: { id: "neutral", combatantIds: ["ally-1"] },
+            monsters: { id: "monsters", combatantIds: ["npc-1"] },
+        },
+        lastRolledRound: 1,
+        lastRolls: { players: 20, neutral: 15, monsters: 10 },
+        activeSideId: "players",
+        activeSideIndex: 0,
+        activeCombatantId: "pc-1",
+        commanderIds: { neutral: "ally-1" },
+    };
+    let unsetCount = 0;
+    const combat = {
+        combatants: [player, movedAlly, monster],
+        getFlag(scope, key) {
+            return scope === "side-initiative" && key === "state" ? persisted : null;
+        },
+        async unsetFlag(scope, key) {
+            assert.equal(`${scope}.${key}`, "side-initiative.state");
+            unsetCount += 1;
+            persisted = null;
+        },
+        async setFlag(scope, key, value) {
+            assert.equal(`${scope}.${key}`, "side-initiative.state");
+            persisted = persisted
+                ? {
+                      ...persisted,
+                      ...value,
+                      sides: { ...persisted.sides, ...value.sides },
+                      commanderIds: { ...persisted.commanderIds, ...value.commanderIds },
+                  }
+                : value;
+            return value;
+        },
+    } as any;
+
+    await SideInitiativeAPI.refreshCombatantSides(combat);
+
+    assert.equal(unsetCount, 1);
+    assert.deepEqual(Object.keys(persisted.sides), ["players", "monsters"]);
+    assert.deepEqual(persisted.sides.players.combatantIds, ["pc-1", "ally-1"]);
+    assert.deepEqual(persisted.commanderIds, {});
 });
 
 test("rollSideInitiativeData rerolls tied sides until unique", () => {

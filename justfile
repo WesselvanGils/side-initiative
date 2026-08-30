@@ -26,3 +26,13 @@ release version:
     git tag "{{version}}"
 
     git push origin main "{{version}}"
+
+
+deploy-dev:
+    #!/usr/bin/env bash
+    set -euo pipefail
+
+    npm run build
+    rsync -azh --itemize-changes \
+      module.json README.md LICENSE scripts styles lang assets \
+      hydra@hydra:/mnt/HDDs/applications/foundryvtt/Data/modules/side-initiative/

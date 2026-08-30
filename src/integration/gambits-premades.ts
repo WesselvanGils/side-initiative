@@ -1,4 +1,5 @@
 import { getCombatantsForSide } from "../logic.js";
+import { registerSideTurnStartFlusher } from "../api.js";
 import { getGps, getPrimaryGMId, getSideInitiative, hooks, isPrimaryGMClient } from "../runtime.js";
 import type { CombatLike, SideTurnPayload, TokenLike } from "../types.js";
 
@@ -35,6 +36,7 @@ const integrationState: GambitsIntegrationState = {
     warnedKeys: new Set(),
     bridgeRegistered: false,
 };
+let pendingSideTurnStart: Promise<void> = Promise.resolve();
 
 function getGambitsModule(): { active?: boolean; version?: string; data?: { version?: string } } | null {
     return game?.modules?.get?.("gambits-premades") ?? null;
@@ -99,6 +101,7 @@ export function resetGambitsPremadesIntegrationState(): void {
     integrationState.patchedOpportunityAttackScenarios = null;
     integrationState.warnedKeys.clear();
     integrationState.bridgeRegistered = false;
+    pendingSideTurnStart = Promise.resolve();
 }
 
 function warnOnce(key: string, message: string): void {
@@ -238,12 +241,20 @@ async function bridgeSideTurn(payload: SideTurnPayload, behaviorName: string): P
     }
 }
 
+function handleSideTurnStart(payload: SideTurnPayload = {}): Promise<void> {
+    pendingSideTurnStart = bridgeSideTurn(payload, "onTurnStart");
+    return pendingSideTurnStart;
+}
+
+function flushSideTurnStart(): Promise<void> {
+    return pendingSideTurnStart;
+}
+
 function registerSideTurnBridge(): void {
     if (integrationState.bridgeRegistered) return;
     integrationState.bridgeRegistered = true;
-    hooks()?.on("side-initiative.sideTurnStart", (payload: SideTurnPayload) =>
-        bridgeSideTurn(payload ?? {}, "onTurnStart"),
-    );
+    hooks()?.on("side-initiative.sideTurnStart", handleSideTurnStart);
+    registerSideTurnStartFlusher(flushSideTurnStart);
     hooks()?.on("side-initiative.sideTurnEnd", (payload: SideTurnPayload) =>
         bridgeSideTurn(payload ?? {}, "onTurnEnd"),
     );

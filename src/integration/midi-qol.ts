@@ -1,8 +1,22 @@
 import { getCombatState, getCombatantsForSide, getSideCommanderId, isActorOnActiveSide } from "../logic.js";
+import { registerSideTurnStartFlusher } from "../api.js";
 import { hooks, isPrimaryGMClient } from "../runtime.js";
 import type { ActorLike, CombatLike, CombatantLike, SideTurnPayload } from "../types.js";
 
 const REACTION_EFFECT_ID = "dnd5ereaction000";
+let pendingSideTurnStart: Promise<void> = Promise.resolve();
+
+function handleSideTurnStart({ combat, sideId }: SideTurnPayload = {}): Promise<void> {
+    pendingSideTurnStart =
+        game?.user?.isGM && isPrimaryGMClient()
+            ? resetReactionsForSide(combat ?? null, sideId ?? null)
+            : Promise.resolve();
+    return pendingSideTurnStart;
+}
+
+function flushSideTurnStart(): Promise<void> {
+    return pendingSideTurnStart;
+}
 
 function getActorKey(actor: ActorLike | null | undefined, combatant: CombatantLike | null | undefined): string | null {
     return (
@@ -127,8 +141,6 @@ export function registerMidiQolIntegration(): void {
         return !isActorOnActiveSide(actor, game?.combat as CombatLike | null);
     });
 
-    hooks()?.on("side-initiative.sideTurnStart", async ({ combat, sideId }: SideTurnPayload = {}): Promise<void> => {
-        if (!game?.user?.isGM || !isPrimaryGMClient()) return;
-        await resetReactionsForSide(combat ?? null, sideId ?? null);
-    });
+    hooks()?.on("side-initiative.sideTurnStart", handleSideTurnStart);
+    registerSideTurnStartFlusher(flushSideTurnStart);
 }

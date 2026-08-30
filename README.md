@@ -30,6 +30,14 @@ Commander changes default to side owners and can be restricted to the GM in the 
 - Used reactions are cleared again when a side becomes active so characters regain reaction access on their next turn.
 - Start of turn and end of turn triggers need special attention because when a side starts their collective turn this doesn't proc individual actors.
 
+## Chris' Premades notes
+
+- The side-turn bridge is enabled only for Chris' Premades **1.5.40**.
+- The integration also validates the CPR macro API and private `updateCombat`
+  hook source before registering. Unsupported versions or source shapes disable
+  the bridge and warn the GM instead of risking duplicate or incorrectly
+  targeted workflows.
+
 ## Gambits Premades notes
 
 - Side Initiative patches Gambits Premades Opportunity Attack at runtime for the supported Gambits versions.
@@ -92,6 +100,20 @@ npm run createSymlinks   # symlinks the repo into <dataPath>/Data/modules/side-i
 
 Re-run `npm run build` (or keep `build:watch` running) after changing source so
 Foundry picks up the new `scripts/` output.
+
+To build and copy the full development module payload to the configured Foundry server over SSH:
+
+```bash
+just deploy-dev
+```
+
+This runs the TypeScript build and uses non-destructive `rsync` to copy the
+manifest, documentation, compiled scripts, styles, localization, and assets.
+The destination is:
+
+```text
+hydra@hydra:/mnt/HDDs/applications/foundryvtt/Data/modules/side-initiative/
+```
 
 The logic and integration tests run against `src/` via `tsx`:
 

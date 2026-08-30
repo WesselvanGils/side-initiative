@@ -4,6 +4,7 @@ import {
     flushCprBridge,
     getCprPremadesIntegrationState,
     getCprPremadesVersion,
+    isSupportedCprPremadesVersion,
     registerChrisPremadesIntegration,
     resetCprPremadesIntegrationState,
     validateCprShape,
@@ -65,7 +66,7 @@ interface InstallOptions {
 
 function installGlobals(options: InstallOptions = {}) {
     const {
-        version = "1.2.29",
+        version = "1.5.40",
         cprActive = true,
         primaryGM = "gm-1",
         currentTokenId = "commander",
@@ -244,9 +245,8 @@ function installGlobals(options: InstallOptions = {}) {
         },
     };
     globalThis.Hooks = createHooks();
-    if (options.cprUpdateCombat) {
-        (globalThis.Hooks as ReturnType<typeof createHooks>).on("updateCombat", options.cprUpdateCombat);
-    }
+    const cprUpdateCombat = options.cprUpdateCombat ?? createFakeCprUpdateCombat([]);
+    (globalThis.Hooks as ReturnType<typeof createHooks>).on("updateCombat", cprUpdateCombat);
     (globalThis as { chrisPremades?: unknown }).chrisPremades = {
         macros: defaultMacros,
         utils: { templateUtils },
@@ -330,10 +330,12 @@ const itemWithCombatMacro = (name: string, macroNames: string[]) => ({
     },
 });
 
-test("CPR helpers validate the API shape and read the version", () => {
+test("CPR helpers validate the API shape and recognize supported versions", () => {
     const env = installGlobals();
     try {
-        assert.equal(getCprPremadesVersion(), "1.2.29");
+        assert.equal(getCprPremadesVersion(), "1.5.40");
+        assert.equal(isSupportedCprPremadesVersion("1.5.40"), true);
+        assert.equal(isSupportedCprPremadesVersion("1.5.39"), false);
         assert.equal(validateCprShape(), true);
     } finally {
         env.restore();
@@ -348,6 +350,29 @@ test("validateCprShape is false when the CPR API is incomplete", () => {
     });
     try {
         assert.equal(validateCprShape(), false);
+    } finally {
+        env.restore();
+    }
+});
+
+test("CPR integration activates on cprReady when its API arrives later", () => {
+    const env = installGlobals({ templateUtils: {} });
+    try {
+        registerChrisPremadesIntegration();
+        assert.equal(getCprPremadesIntegrationState().status, "inactive");
+
+        const api = (globalThis as { chrisPremades?: { utils?: { templateUtils?: unknown } } }).chrisPremades;
+        if (api?.utils) {
+            api.utils.templateUtils = { getTemplatesInToken: () => new Set() };
+        }
+        const [cprReady] = (globalThis.Hooks as ReturnType<typeof createHooks>).get("cprReady");
+        cprReady?.();
+
+        assert.equal(getCprPremadesIntegrationState().status, "active");
+        assert.equal(
+            (globalThis.Hooks as ReturnType<typeof createHooks>).get("side-initiative.sideTurnStart").length,
+            1,
+        );
     } finally {
         env.restore();
     }
@@ -380,6 +405,25 @@ test("CPR integration is a no-op when the module is inactive", () => {
             (globalThis.Hooks as ReturnType<typeof createHooks>).get("side-initiative.sideTurnStart").length,
             0,
         );
+    } finally {
+        env.restore();
+    }
+});
+
+test("CPR integration rejects unsupported versions before registering hooks", () => {
+    const env = installGlobals({ version: "1.5.39" });
+    try {
+        registerChrisPremadesIntegration();
+
+        const state = getCprPremadesIntegrationState();
+        assert.equal(state.status, "unsupported");
+        assert.match(state.reason ?? "", /1\.5\.39/);
+        assert.equal(
+            (globalThis.Hooks as ReturnType<typeof createHooks>).get("side-initiative.sideTurnStart").length,
+            0,
+        );
+        assert.equal(env.warnings.length, 1);
+        assert.match(env.warnings[0] ?? "", /ChrisPremadesUnsupportedVersion/);
     } finally {
         env.restore();
     }
@@ -695,7 +739,7 @@ test("CPR updateCombat wrap never suppresses non-side-initiative combats", async
     }
 });
 
-test("CPR updateCombat wrap does not touch handlers that do not match CPR's shape", async () => {
+test("CPR integration rejects updateCombat handlers that do not match the supported shape", () => {
     const dispatches: unknown[] = [];
     const notCpr = function someOtherHandler(combat: unknown) {
         dispatches.push(combat);
@@ -704,8 +748,11 @@ test("CPR updateCombat wrap does not touch handlers that do not match CPR's shap
     try {
         registerChrisPremadesIntegration();
 
-        // The non-matching handler is left untouched (still the original reference).
         assert.equal(env.getUpdateCombatHandler(), notCpr);
+        assert.equal(getCprPremadesIntegrationState().status, "unsupported");
+        assert.match(getCprPremadesIntegrationState().reason ?? "", /source shape/);
+        assert.equal(env.warnings.length, 1);
+        assert.match(env.warnings[0] ?? "", /ChrisPremadesSourceMismatch/);
     } finally {
         env.restore();
     }
@@ -893,7 +940,7 @@ function installCombatUtilsEnv(options: CombatUtilsEnvOptions = {}) {
         modules: {
             get(id: string) {
                 return id === "chris-premades"
-                    ? { active: true, version: "1.3.53", data: { version: "1.3.53" } }
+                    ? { active: true, version: "1.5.40", data: { version: "1.5.40" } }
                     : null;
             },
         },
@@ -906,6 +953,7 @@ function installCombatUtilsEnv(options: CombatUtilsEnvOptions = {}) {
         },
     } as unknown as typeof globalThis.ui;
     globalThis.Hooks = createHooks() as unknown as typeof globalThis.Hooks;
+    (globalThis.Hooks as unknown as ReturnType<typeof createHooks>).on("updateCombat", createFakeCprUpdateCombat([]));
     (globalThis as { canvas?: unknown }).canvas = {
         tokens: { get: (id: string) => tokenById[id] ?? null },
     };

@@ -161,14 +161,22 @@ async function syncCombatToSide(
 }
 
 /**
- * Async work that must complete during a side's turn-end BEFORE the turn
- * advances. Advancing fires Foundry's `updateCombat`, which midi-qol uses to
- * auto-untarget at end of turn — if that runs while an integration's turn-end
- * workflows are still mid-flight, targets get cleared before damage resolves and
- * tokens miss damage. Integrations register a flusher; `emitSideTurnEndHook`
- * awaits them all before returning.
+ * Async integration work launched by side-turn lifecycle hooks. Foundry's
+ * `Hooks.callAll` does not await handler promises, so integrations expose their
+ * pending work through these flushers. Start flushers keep the API pending until
+ * recovery/reset/region work finishes; end flushers finish before `updateCombat`
+ * advances the turn and lets MidiQOL clear targets.
  */
+const sideTurnStartFlushers: Array<() => Promise<unknown>> = [];
 const sideTurnEndFlushers: Array<() => Promise<unknown>> = [];
+
+export function registerSideTurnStartFlusher(flusher: () => Promise<unknown>): void {
+    if (!sideTurnStartFlushers.includes(flusher)) sideTurnStartFlushers.push(flusher);
+}
+
+export function clearSideTurnStartFlushers(): void {
+    sideTurnStartFlushers.length = 0;
+}
 
 export function registerSideTurnEndFlusher(flusher: () => Promise<unknown>): void {
     if (!sideTurnEndFlushers.includes(flusher)) sideTurnEndFlushers.push(flusher);
@@ -195,11 +203,11 @@ async function emitSideTurnEndHook(
     }
 }
 
-function emitSideTurnStartHook(
+async function emitSideTurnStartHook(
     combat: CombatLike | null | undefined,
     sideId: string | null | undefined,
     previousSideId: string | null | undefined,
-): void {
+): Promise<void> {
     if (!sideId) return;
     const payload: SideTurnPayload = {
         combat,
@@ -207,6 +215,9 @@ function emitSideTurnStartHook(
         previousSideId: previousSideId ? normalizeSideId(previousSideId) : null,
     };
     hooks()?.callAll("side-initiative.sideTurnStart", payload);
+    if (sideTurnStartFlushers.length) {
+        await Promise.all(sideTurnStartFlushers.map((flusher) => Promise.resolve(flusher()).catch(() => undefined)));
+    }
 }
 
 function getCombatantEntries(combat: CombatLike | null | undefined): CombatantLike[] {
@@ -750,7 +761,7 @@ export const SideInitiativeAPI: SideInitiativeApi = {
         state.activeCombatantId = getSideRepresentativeCombatant(resolvedCombat, normalizedSideId)?.id ?? null;
         await setCombatState(resolvedCombat, cloneSideStateForSave(state, resolvedCombat.combatants));
         await syncCombatToSide(resolvedCombat, normalizedSideId, { roundDelta: 0 });
-        emitSideTurnStartHook(resolvedCombat, normalizedSideId, previousSideId);
+        await emitSideTurnStartHook(resolvedCombat, normalizedSideId, previousSideId);
         return state;
     },
 
@@ -769,7 +780,7 @@ export const SideInitiativeAPI: SideInitiativeApi = {
         state.activeCombatantId = getSideRepresentativeCombatant(resolvedCombat, nextSideId)?.id ?? null;
         await setCombatState(resolvedCombat, cloneSideStateForSave(state, resolvedCombat.combatants));
         await syncCombatToSide(resolvedCombat, nextSideId, { roundDelta });
-        emitSideTurnStartHook(resolvedCombat, nextSideId, currentSideId);
+        await emitSideTurnStartHook(resolvedCombat, nextSideId, currentSideId);
         return state;
     },
 

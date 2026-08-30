@@ -1,0 +1,227 @@
+{
+  "biome.json": {
+    "mtime": 1783720869.647526,
+    "ast_hash": "6e4eb6168aefb7a75332ae9352572781",
+    "semantic_hash": "6e4eb6168aefb7a75332ae9352572781"
+  },
+  "lang/en.json": {
+    "mtime": 1782510805.4682188,
+    "ast_hash": "1a51dbcc481b83310e30df127cee178e",
+    "semantic_hash": "1a51dbcc481b83310e30df127cee178e"
+  },
+  "module.json": {
+    "mtime": 1782512676.585373,
+    "ast_hash": "00bde73312cb853f04f20848ab9aea49",
+    "semantic_hash": "00bde73312cb853f04f20848ab9aea49"
+  },
+  "package.json": {
+    "mtime": 1783723459.5529573,
+    "ast_hash": "ec450f6d50d667782158b75cf242861a",
+    "semantic_hash": "ec450f6d50d667782158b75cf242861a"
+  },
+  "src/api.ts": {
+    "mtime": 1783720779.3538666,
+    "ast_hash": "87e89d131c6f5d1765257a999a5f98ef",
+    "semantic_hash": "87e89d131c6f5d1765257a999a5f98ef"
+  },
+  "src/constants.ts": {
+    "mtime": 1783720779.3468664,
+    "ast_hash": "e7a941d915fc3245c3d1ab3cee3304f0",
+    "semantic_hash": "e7a941d915fc3245c3d1ab3cee3304f0"
+  },
+  "src/controller/combat-controller.ts": {
+    "mtime": 1783720779.3518665,
+    "ast_hash": "de0610386b18f6103a3d8c9821b62691",
+    "semantic_hash": "de0610386b18f6103a3d8c9821b62691"
+  },
+  "src/integration/chris-premades.ts": {
+    "mtime": 1783720779.3538666,
+    "ast_hash": "4b83a3826dfafedfefb5c42cef095b18",
+    "semantic_hash": "4b83a3826dfafedfefb5c42cef095b18"
+  },
+  "src/integration/dnd5e.ts": {
+    "mtime": 1783720779.3518665,
+    "ast_hash": "e7a7b364f30fbb0f1cbcaf784f91bafb",
+    "semantic_hash": "e7a7b364f30fbb0f1cbcaf784f91bafb"
+  },
+  "src/integration/gambits-premades.ts": {
+    "mtime": 1783724066.912684,
+    "ast_hash": "fc82a57e8f7e8660ff6c5644e3b67310",
+    "semantic_hash": "fc82a57e8f7e8660ff6c5644e3b67310"
+  },
+  "src/integration/legendary-actions.ts": {
+    "mtime": 1783720779.3528666,
+    "ast_hash": "73286e6952ef47193e214f219dbbdcbc",
+    "semantic_hash": "73286e6952ef47193e214f219dbbdcbc"
+  },
+  "src/integration/midi-qol.ts": {
+    "mtime": 1783720779.3498664,
+    "ast_hash": "454327ec170376ab53dd23f4c65e3db3",
+    "semantic_hash": "454327ec170376ab53dd23f4c65e3db3"
+  },
+  "src/logic.ts": {
+    "mtime": 1783720779.3558667,
+    "ast_hash": "f0ace4f5b65fe23c0f0fb7a3e64d8a21",
+    "semantic_hash": "f0ace4f5b65fe23c0f0fb7a3e64d8a21"
+  },
+  "src/module.ts": {
+    "mtime": 1783720779.3498664,
+    "ast_hash": "7270276312c051865d026253cb80992f",
+    "semantic_hash": "7270276312c051865d026253cb80992f"
+  },
+  "src/runtime.ts": {
+    "mtime": 1783720779.3488665,
+    "ast_hash": "7f496519c4ddb6220274dfefb84bf48c",
+    "semantic_hash": "7f496519c4ddb6220274dfefb84bf48c"
+  },
+  "src/types.ts": {
+    "mtime": 1783720779.3498664,
+    "ast_hash": "a225a6d1720546ce75b9bfdfbf2a27e9",
+    "semantic_hash": "a225a6d1720546ce75b9bfdfbf2a27e9"
+  },
+  "src/types/augmentations.d.ts": {
+    "mtime": 1781880643.826934,
+    "ast_hash": "f4dc665b0f53cb6b85d5f9aed4a8fc55",
+    "semantic_hash": "f4dc665b0f53cb6b85d5f9aed4a8fc55"
+  },
+  "src/ui/combat-dock.ts": {
+    "mtime": 1783720779.3528666,
+    "ast_hash": "4a78af60bb169f356da44105ed6c705f",
+    "semantic_hash": "4a78af60bb169f356da44105ed6c705f"
+  },
+  "src/ui/side-editor.ts": {
+    "mtime": 1783720779.3498664,
+    "ast_hash": "0571e17b086cfb1b5ded0a79fc0d2ebc",
+    "semantic_hash": "0571e17b086cfb1b5ded0a79fc0d2ebc"
+  },
+  "src/ui/tracker.ts": {
+    "mtime": 1783720779.3508666,
+    "ast_hash": "f2fb7dd4cc779f85cb0d70af8d82ee07",
+    "semantic_hash": "f2fb7dd4cc779f85cb0d70af8d82ee07"
+  },
+  "tests/chris-premades.test.ts": {
+    "mtime": 1783720779.3558667,
+    "ast_hash": "bc1994d28fae903fd6d9eb53b74a5d3b",
+    "semantic_hash": "bc1994d28fae903fd6d9eb53b74a5d3b"
+  },
+  "tests/combat-controller.test.ts": {
+    "mtime": 1783720495.2361927,
+    "ast_hash": "358d36a072264e568f4b5d4e6e894390",
+    "semantic_hash": "358d36a072264e568f4b5d4e6e894390"
+  },
+  "tests/combat-dock.test.ts": {
+    "mtime": 1783720779.3508666,
+    "ast_hash": "13e8053a2d2801d2f31f6cac8493cd02",
+    "semantic_hash": "13e8053a2d2801d2f31f6cac8493cd02"
+  },
+  "tests/commander-socket.test.ts": {
+    "mtime": 1783720779.3518665,
+    "ast_hash": "4ae59b3be990a86ac1a3a764040a5ea6",
+    "semantic_hash": "4ae59b3be990a86ac1a3a764040a5ea6"
+  },
+  "tests/dnd5e.test.ts": {
+    "mtime": 1783720779.3508666,
+    "ast_hash": "6e143f48d350fc74b88a0a1edbfb3523",
+    "semantic_hash": "6e143f48d350fc74b88a0a1edbfb3523"
+  },
+  "tests/gambits-premades.test.ts": {
+    "mtime": 1783724238.442099,
+    "ast_hash": "56f82c695dc8428938203f63e60b5670",
+    "semantic_hash": "56f82c695dc8428938203f63e60b5670"
+  },
+  "tests/legendary-actions.test.ts": {
+    "mtime": 1783720779.3528666,
+    "ast_hash": "1023eef5329265d0dbb293e508a5cfa2",
+    "semantic_hash": "1023eef5329265d0dbb293e508a5cfa2"
+  },
+  "tests/logic.test.ts": {
+    "mtime": 1783720779.3568668,
+    "ast_hash": "071cf8f5b010a0f9c14a17d991a4aaa9",
+    "semantic_hash": "071cf8f5b010a0f9c14a17d991a4aaa9"
+  },
+  "tests/midi-qol.test.ts": {
+    "mtime": 1783720779.3508666,
+    "ast_hash": "56d3c2101745b31d8a3a81d94ebcd605",
+    "semantic_hash": "56d3c2101745b31d8a3a81d94ebcd605"
+  },
+  "tests/module.test.ts": {
+    "mtime": 1783720779.3498664,
+    "ast_hash": "3fafd9ff6c1dd6ffa3ae04afbdde5617",
+    "semantic_hash": "3fafd9ff6c1dd6ffa3ae04afbdde5617"
+  },
+  "tests/publish-foundry.test.ts": {
+    "mtime": 1783725543.1721122,
+    "ast_hash": "41bed62f719d50972d58441334400382",
+    "semantic_hash": "41bed62f719d50972d58441334400382"
+  },
+  "tests/release.test.ts": {
+    "mtime": 1783720779.3508666,
+    "ast_hash": "a2cfbed0329c3a532945f44d0b2c33e0",
+    "semantic_hash": "a2cfbed0329c3a532945f44d0b2c33e0"
+  },
+  "tests/tracker.test.ts": {
+    "mtime": 1783720779.3528666,
+    "ast_hash": "6a2f096672c34e2fd804e90e8b0a891e",
+    "semantic_hash": "6a2f096672c34e2fd804e90e8b0a891e"
+  },
+  "tools/build-release.ts": {
+    "mtime": 1783720779.3508666,
+    "ast_hash": "2954f00f8a8ce41dcfe664acb2167d19",
+    "semantic_hash": "2954f00f8a8ce41dcfe664acb2167d19"
+  },
+  "tools/create-symlinks.ts": {
+    "mtime": 1783720779.3478663,
+    "ast_hash": "761caabc0da826144a2bdec6c22f9f4c",
+    "semantic_hash": "761caabc0da826144a2bdec6c22f9f4c"
+  },
+  "tools/publish-foundry.ts": {
+    "mtime": 1783766142.378193,
+    "ast_hash": "139627821f4998833746905314e49e59",
+    "semantic_hash": "139627821f4998833746905314e49e59"
+  },
+  "tsconfig.json": {
+    "mtime": 1782423048.2526133,
+    "ast_hash": "d8411e3795c3c46039539d3e06979086",
+    "semantic_hash": "d8411e3795c3c46039539d3e06979086"
+  },
+  ".github/workflows/release.yml": {
+    "mtime": 1783724476.771803,
+    "ast_hash": "44f5b2d18ac311476da5931c62e1ef4b",
+    "semantic_hash": "44f5b2d18ac311476da5931c62e1ef4b"
+  },
+  "AGENTS.md": {
+    "mtime": 1783724151.369457,
+    "ast_hash": "38d99be27af1fbb3c733d71ce983acc0",
+    "semantic_hash": "38d99be27af1fbb3c733d71ce983acc0"
+  },
+  "CHANGELOG.md": {
+    "mtime": 1783722835.140058,
+    "ast_hash": "a5fa1057fe88f8a0d36c6e2107b2c18a",
+    "semantic_hash": "a5fa1057fe88f8a0d36c6e2107b2c18a"
+  },
+  "README.md": {
+    "mtime": 1782068447.5794668,
+    "ast_hash": "bd31221a429f692b0a972e017ec0331c",
+    "semantic_hash": "bd31221a429f692b0a972e017ec0331c"
+  },
+  "TODO.md": {
+    "mtime": 1783718619.4509723,
+    "ast_hash": "18cda48897eb5b55ea757856790af224",
+    "semantic_hash": "18cda48897eb5b55ea757856790af224"
+  },
+  "assets/dock/License.txt": {
+    "mtime": 1782041597.0337157,
+    "ast_hash": "cd0ff8fc8b5947336b71f5d1991e2350",
+    "semantic_hash": "cd0ff8fc8b5947336b71f5d1991e2350"
+  },
+  "assets/dock/divider.png": {
+    "mtime": 1782041586.7195075,
+    "ast_hash": "32e152bb4a3434766e1cfa2ea312c752",
+    "semantic_hash": "32e152bb4a3434766e1cfa2ea312c752"
+  },
+  "assets/dock/frame.png": {
+    "mtime": 1782041586.7176273,
+    "ast_hash": "1fc062d7032d93eb8cca315d56c7cc9c",
+    "semantic_hash": "1fc062d7032d93eb8cca315d56c7cc9c"
+  }
+}

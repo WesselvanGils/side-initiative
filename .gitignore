@@ -154,3 +154,6 @@ libs
 
 # TypeScript build output
 scripts
+
+# Repository-local Foundry playtest runtime (licensed app, world data, and logs)
+.playtest/

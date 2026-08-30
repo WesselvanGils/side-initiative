@@ -1,4 +1,4 @@
-import { registerSideTurnEndFlusher } from "../api.js";
+import { registerSideTurnEndFlusher, registerSideTurnStartFlusher } from "../api.js";
 import { getCombatantsForSide, isSideCombat, isTokenOnActiveSide } from "../logic.js";
 import { hooks, isPrimaryGMClient } from "../runtime.js";
 import type { ActorLike, CombatLike, CombatantLike, SideTurnPayload, TokenLike } from "../types.js";
@@ -9,6 +9,7 @@ import type { ActorLike, CombatLike, CombatantLike, SideTurnPayload, TokenLike }
  * functions would be captured as the "originals" and recurse).
  */
 const CPR_COMBAT_UTILS_PATCH = Symbol.for("side-initiative.cpr-combat-utils-patch");
+const SUPPORTED_CPR_PREMADES_VERSIONS = ["1.5.40"];
 
 /**
  * Opt-in bridge diagnostics. In the Foundry console (F12) run
@@ -166,11 +167,17 @@ function getCprModule(): {
 }
 
 /**
- * Read the installed Chris' Premades version (diagnostics only — the bridge
- * shape-checks the API rather than pinning a version).
+ * Read the installed Chris' Premades version.
  */
 export function getCprPremadesVersion(): string | null {
     return getCprModule()?.version ?? getCprModule()?.data?.version ?? null;
+}
+
+/**
+ * Determine whether the installed Chris' Premades version is supported.
+ */
+export function isSupportedCprPremadesVersion(version: string | null | undefined = getCprPremadesVersion()): boolean {
+    return SUPPORTED_CPR_PREMADES_VERSIONS.includes(String(version ?? ""));
 }
 
 function getCprApi(): CprApi | null {
@@ -178,9 +185,8 @@ function getCprApi(): CprApi | null {
 }
 
 /**
- * Defensive shape check. The macro objects and `templateUtils.getTemplatesInToken`
- * are public-ish utilities CPR uses across its own modules, so reading their
- * shape degrades gracefully across CPR releases — no monkeypatch, no version pin.
+ * Defensive shape check for the CPR macro API used by the side-turn bridge.
+ * Version support is checked separately before any bridge hooks are registered.
  */
 export function validateCprShape(): boolean {
     const api = getCprApi();
@@ -577,9 +583,10 @@ function registerSideTurnBridge(): void {
     hooks()?.on("side-initiative.sideTurnEnd", (payload: SideTurnPayload) =>
         bridgeSideTurn(payload ?? {}, ["turnEnd"]),
     );
-    // Await the turnEnd batch before the turn advances (registered with the API's
-    // side-turn-end flusher registry; see emitSideTurnEndHook in api.ts).
+    // Expose the serialized queue to the API so both lifecycle methods wait for
+    // their CPR batch before proceeding or resolving.
     registerSideTurnEndFlusher(flushCprBridge);
+    registerSideTurnStartFlusher(flushCprBridge);
 }
 
 /**
@@ -616,11 +623,8 @@ function shouldSuppressCprUpdateCombat(combat: CombatLike | null | undefined): b
 
 /**
  * Locate CPR's `updateCombat` hook handler in the Foundry registry and wrap it so
- * within-side turn changes are suppressed. The handler is found by source shape
- * (mirroring the Gambits OA source-marker approach) and wrapped in place by
- * mutating the registered `HookedFunction`'s `fn`. Idempotent. Returns false if
- * the handler cannot be found (e.g. CPR loaded later) — the side-turn bridge still
- * works without it; only the commander-switch dedup is lost.
+ * native per-combatant turn dispatch is suppressed for side combats. The caller
+ * keeps the integration disabled when the supported source markers are absent.
  */
 function wrapCprUpdateCombat(): boolean {
     if (integrationState.updateCombatWrapped) return true;
@@ -823,6 +827,38 @@ function wrapCprCombatUtils(): boolean {
     return true;
 }
 
+function disableUnsupportedVersion(version: string | null): void {
+    disableIntegration(
+        "unsupported",
+        `Chris' Premades integration is disabled because version ${version ?? "unknown"} is not supported.`,
+        "cpr-unsupported-version",
+        game?.i18n?.format?.("SIDE-INITIATIVE.Notifications.ChrisPremadesUnsupportedVersion", {
+            version: version ?? "unknown",
+            supported: SUPPORTED_CPR_PREMADES_VERSIONS.join(" or "),
+        }) ?? "",
+    );
+}
+
+function disableUnsupportedShape(reason: string): void {
+    disableIntegration(
+        "unsupported",
+        reason,
+        "cpr-source-mismatch",
+        game?.i18n?.localize?.("SIDE-INITIATIVE.Notifications.ChrisPremadesSourceMismatch") ?? "",
+    );
+}
+
+function tryActivateCprIntegration(): boolean {
+    if (!validateCprShape() || !wrapCprUpdateCombat()) return false;
+
+    wrapCprCombatUtils();
+    registerSideTurnBridge();
+    registerCprSideTurnTracker();
+    integrationState.status = "active";
+    integrationState.reason = null;
+    return true;
+}
+
 /**
  * Register the Chris' Premades compatibility bridge: fire CPR `turnStart`/
  * `turnEnd`/`everyTurn` macro passes for every token on the active side. The
@@ -835,35 +871,35 @@ export function registerChrisPremadesIntegration(): void {
     if (!getCprModule()?.active) return;
 
     integrationState.version = getCprPremadesVersion();
-    registerSideTurnBridge();
-    registerCprSideTurnTracker();
-    wrapCprUpdateCombat();
-    wrapCprCombatUtils();
-
-    if (validateCprShape()) {
-        integrationState.status = "active";
-        integrationState.reason = null;
+    if (!isSupportedCprPremadesVersion(integrationState.version)) {
+        disableUnsupportedVersion(integrationState.version);
         return;
     }
 
-    // CPR populates `globalThis.chrisPremades` and registers its hooks during its
-    // own ready (`cprReady`), which may run after this module's ready. Retry the
-    // wraps then; the bridge re-checks the API shape on every fire regardless.
+    if (tryActivateCprIntegration()) return;
+
+    // CPR populates its API and hook registry during cprReady. If the API is
+    // already present, a failed activation means the private updateCombat source
+    // no longer matches and waiting cannot make it compatible.
+    if (validateCprShape()) {
+        disableUnsupportedShape("Chris' Premades updateCombat source shape is not supported.");
+        return;
+    }
+
     integrationState.status = "inactive";
     integrationState.reason = "Chris' Premades API not yet available.";
     hooks()?.once("cprReady", () => {
-        wrapCprUpdateCombat();
-        wrapCprCombatUtils();
-        if (validateCprShape()) {
-            integrationState.status = "active";
-            integrationState.reason = null;
-        } else {
-            disableIntegration(
-                "unsupported",
-                "Chris' Premades API shape is not supported.",
-                "cpr-shape-mismatch",
-                "Side Initiative: Chris' Premades area triggers are disabled because the installed Chris' Premades API is not supported.",
-            );
+        integrationState.version = getCprPremadesVersion();
+        if (!isSupportedCprPremadesVersion(integrationState.version)) {
+            disableUnsupportedVersion(integrationState.version);
+            return;
         }
+        if (tryActivateCprIntegration()) return;
+
+        disableUnsupportedShape(
+            validateCprShape()
+                ? "Chris' Premades updateCombat source shape is not supported."
+                : "Chris' Premades API shape is not supported.",
+        );
     });
 }
