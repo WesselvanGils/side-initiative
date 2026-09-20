@@ -23,9 +23,11 @@ Foundry VTT module for the 2014 DMG side initiative variant.
 7. Press `Enter` to advance the active side when you are the GM or the current commander.
 
 Commander changes default to side owners and can be restricted to the GM in the module settings.
+Only an owner of the active side's commander can end that side's turn; owning another member does not grant turn advancement. The GM can always advance.
 
 ## MidiQOL notes
 
+- Keep a GM client logged into the world for player automation. MidiQOL uses that client to apply damage and effects to documents the player does not own; running the Foundry server alone is insufficient. For local multiplayer tests, open the GM and player in separate browser profiles or a normal and private window.
 - This module uses `midi-qol.preSetReactionUsed` to suppress reaction consumption for actors on the active side.
 - On v14, off-side Actions (including save and utility spells) consume a reaction through MidiQOL's workflow; legendary actions and workflows explicitly marked `notReaction` retain their normal behavior.
 - Used reactions are cleared again when a side becomes active so characters regain reaction access on their next turn. Reactions configured to reset on rests or never are preserved.

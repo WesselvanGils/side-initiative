@@ -6,7 +6,7 @@
     "SIDE-INITIATIVE.Settings.ShowTrackerControls.Name": "Show tracker controls",
     "SIDE-INITIATIVE.Settings.ShowTrackerControls.Hint": "Add Side Initiative controls to the combat tracker header.",
     "SIDE-INITIATIVE.Settings.CommanderControl.Name": "Commander control",
-    "SIDE-INITIATIVE.Settings.CommanderControl.Hint": "Choose who can end a side's turn and change a side's commander. \"Side owners\" allows any player who owns a member of the side to act; \"GM only\" restricts both to the GM.",
+    "SIDE-INITIATIVE.Settings.CommanderControl.Hint": "Choose who can end a side's turn and change a side's commander. \"Side owners\" allows side members to change commanders, but only the active commander's owner can end the turn. \"GM only\" restricts both to the GM.",
     "SIDE-INITIATIVE.Settings.CommanderControl.SideOwners": "Side owners",
     "SIDE-INITIATIVE.Settings.CommanderControl.GMOnly": "GM only",
     "SIDE-INITIATIVE.Settings.InitiativeMethod.Name": "Initiative method",

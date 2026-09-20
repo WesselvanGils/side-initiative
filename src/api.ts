@@ -744,7 +744,13 @@ export const SideInitiativeAPI: SideInitiativeApi = {
         if (!resolvedCombat || !resolvedCombat.started || !isSideCombat(resolvedCombat)) return false;
 
         const activeSideId = getActiveSideId(resolvedCombat);
-        return canUserControlSide(resolvedCombat, activeSideId, user);
+        if (!canUserControlSide(resolvedCombat, activeSideId, user)) return false;
+        if (user?.isGM) return true;
+        const commander = getSideRepresentativeCombatant(resolvedCombat, activeSideId ?? "");
+        if (!commander || commander.defeated) return false;
+        return (
+            commander.testUserPermission?.(user, "OWNER") ?? Boolean(user?.id === game?.user?.id && commander.isOwner)
+        );
     },
 
     async setActiveSide(combat, sideId) {

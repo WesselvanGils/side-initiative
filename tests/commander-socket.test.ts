@@ -636,3 +636,44 @@ test("requestAdvanceSide warns and returns false when the socket transport is un
         (globalThis as { ui?: unknown }).ui = originalUi;
     }
 });
+
+test("only the active commander's owner can advance, including GM socket authorization", async () => {
+    const commander = createCombatant({ id: "commander", sideId: "players", ownerIds: ["player-1"] });
+    const member = createCombatant({ id: "member", sideId: "players", ownerIds: ["player-2"] });
+    const enemy = createCombatant({ id: "enemy", sideId: "monsters", ownerIds: [] });
+    const combat = createCombat([commander, member, enemy], {
+        activeSideId: "players",
+        order: ["players", "monsters"],
+        commanderIds: { players: "commander" },
+    });
+    const gm = { id: "gm", isGM: true, active: true };
+    const p1 = { id: "player-1", isGM: false };
+    const p2 = { id: "player-2", isGM: false };
+    const previous = testGlobal.game;
+    testGlobal.game = {
+        user: gm,
+        users: { activeGM: gm, get: (id: string) => [gm, p1, p2].find((u) => u.id === id) },
+        combat,
+        combats: { get: () => combat },
+        settings: { get: () => "side-owners" },
+    };
+    try {
+        assert.equal(SideInitiativeAPI.canUserAdvanceSide(combat, p1), true);
+        assert.equal(SideInitiativeAPI.canUserAdvanceSide(combat, p2), false);
+        assert.equal(SideInitiativeAPI.canUserAdvanceSide(combat, gm), true);
+        const result = await handleCommanderSocketRequest(
+            { module: "side-initiative", action: "advanceSide", combatId: combat.id, userId: p2.id },
+            p2.id,
+        );
+        assert.equal(result, null);
+        assert.equal(
+            (combat.getFlag?.("side-initiative", "state") as { activeSideId: string }).activeSideId,
+            "players",
+        );
+        await SideInitiativeAPI.setSideCommander(combat, member);
+        assert.equal(SideInitiativeAPI.canUserAdvanceSide(combat, p1), false);
+        assert.equal(SideInitiativeAPI.canUserAdvanceSide(combat, p2), true);
+    } finally {
+        testGlobal.game = previous;
+    }
+});
