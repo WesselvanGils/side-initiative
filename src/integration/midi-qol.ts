@@ -1,6 +1,12 @@
-import { getCombatState, getCombatantsForSide, getSideCommanderId, isActorOnActiveSide } from "../logic.js";
-import { registerSideTurnStartFlusher } from "../api.js";
-import { hooks, isPrimaryGMClient } from "../runtime.js";
+import {
+    getCombatState,
+    getCombatantsForSide,
+    getSideCommanderId,
+    isActorOnActiveSide,
+    isSideCombat,
+} from "../logic.js";
+import { registerSideTurnPreparer, registerSideTurnStartFlusher } from "../api.js";
+import { getGame, hooks, isPrimaryGMClient } from "../runtime.js";
 import type { ActorLike, CombatLike, CombatantLike, SideTurnPayload } from "../types.js";
 
 const REACTION_EFFECT_ID = "dnd5ereaction000";
@@ -14,7 +20,34 @@ function handleSideTurnStart({ combat, sideId }: SideTurnPayload = {}): Promise<
     return pendingSideTurnStart;
 }
 
-function flushSideTurnStart(): Promise<void> {
+/** Midi's native off-turn check only covers attacks, not save/utility actions. */
+export function configureSideReaction({ workflow, usage }: any): void {
+    const combat = getGame()?.combat as CombatLike | undefined;
+    const actor = workflow?.actor;
+    if (!actor || !combat?.started || !isSideCombat(combat)) return;
+    // Actors outside this encounter should retain Midi's normal behavior.
+    const combatants = combat.combatants as any;
+    const all = combatants?.contents ?? (combatants instanceof Map ? [...combatants.values()] : combatants);
+    if (!Array.from(all ?? []).some((c: any) => (c.actor?.uuid ?? c.actor?.id) === (actor.uuid ?? actor.id))) return;
+    usage.midiOptions ??= {};
+    const options = (usage.midiOptions.workflowOptions ??= {});
+    const activity = workflow.activity;
+    const spendsLegendaryAction = activity?.consumption?.targets?.some(
+        (target: any) => target.target === "resources.legact.value",
+    );
+    if (isActorOnActiveSide(actor, combat) || spendsLegendaryAction) {
+        options.notReaction = true;
+        options.castUsesReaction = false;
+    } else if (
+        !options.notReaction &&
+        !activity?.midiProperties?.automationOnly &&
+        activity?.effectiveActivationType === "action"
+    ) {
+        options.castUsesReaction = true;
+    }
+}
+
+export function flushMidiSideTurnStart(): Promise<void> {
     return pendingSideTurnStart;
 }
 
@@ -68,6 +101,8 @@ function collectCombatantActors(combatant: CombatantLike | null | undefined): Ac
 
 async function resetReactionUsed(actor: ActorLike | null | undefined): Promise<void> {
     if (!actor) return;
+    const actions = actor.getFlag?.("midi-qol", "actions") as { reactionsReset?: string } | undefined;
+    if (actions?.reactionsReset === "rest" || actions?.reactionsReset === "never") return;
 
     try {
         await actor.effects?.get?.(REACTION_EFFECT_ID)?.delete?.();
@@ -110,12 +145,15 @@ async function resetReactionsForSide(
     combat: CombatLike | null | undefined,
     sideId: string | null | undefined,
 ): Promise<void> {
-    if (!combat?.started || !sideId) return;
+    if (!combat || !sideId) return;
+    if (!combat.started && !(Number(getGame()?.release?.generation) >= 14)) return;
 
     const actors = new Map<string, ActorLike>();
     const commanderCombatantIds = getCommanderCombatantIds(combat, sideId);
     for (const combatant of getCombatantsForSide(combat, sideId, { includeDefeated: false })) {
-        if (commanderCombatantIds.has(combatant?.id ?? "")) continue;
+        if (Number(getGame()?.release?.generation) < 14 || !getGame()?.release?.generation) {
+            if (commanderCombatantIds.has(combatant?.id ?? "")) continue;
+        }
         for (const actor of collectCombatantActors(combatant)) {
             const key = getActorKey(actor, combatant);
             if (!actor || !key || actors.has(key)) continue;
@@ -141,6 +179,11 @@ export function registerMidiQolIntegration(): void {
         return !isActorOnActiveSide(actor, game?.combat as CombatLike | null);
     });
 
-    hooks()?.on("side-initiative.sideTurnStart", handleSideTurnStart);
-    registerSideTurnStartFlusher(flushSideTurnStart);
+    if (Number(getGame()?.release?.generation) >= 14) {
+        registerSideTurnPreparer(handleSideTurnStart);
+        hooks()?.on("midi-qol.preItemRollV2", configureSideReaction);
+    } else {
+        hooks()?.on("side-initiative.sideTurnStart", handleSideTurnStart);
+    }
+    registerSideTurnStartFlusher(flushMidiSideTurnStart);
 }

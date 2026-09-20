@@ -452,7 +452,7 @@
 
 /* While the dock is visible, hide other UIs docked to the top of the screen
    (e.g. the DnD5e calendar / SmallTime) to avoid clutter — but keep the core
-   scene navigation, player list and logo. Mirrors combat-tracker-dock. */
+   scene navigation, player list and logo. */
 #ui-top.side-initiative-hide-conflicting:has(#side-initiative-combat-dock:not(.side-dock-hidden)) > *:not(#side-initiative-combat-dock):not(#loading):not(#navigation):not(#players):not(#logo) {
     display: none !important;
 }

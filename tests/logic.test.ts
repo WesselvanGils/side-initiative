@@ -459,14 +459,13 @@ test("commander permissions respect side owners and GM override", () => {
         userEnv.restore();
     }
 
-    // Bug 1: user-2 owns a NON-representative side member (pc-2) and may advance the side,
-    // even though the representative (pc-1) is owned by user-1.
+    // A side member may choose a commander, but only the commander's owner may advance.
     const user2Env = installCommanderGlobals({
         user: { id: "user-2", isGM: false },
         commanderControl: "side-owners",
     });
     try {
-        assert.equal(SideInitiativeAPI.canUserAdvanceSide(combat), true);
+        assert.equal(SideInitiativeAPI.canUserAdvanceSide(combat), false);
         assert.equal(SideInitiativeAPI.canUserSetCommander(otherCombatant, undefined, combat), true);
     } finally {
         user2Env.restore();

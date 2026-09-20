@@ -1,4 +1,4 @@
-import { SideInitiativeAPI, getRoundTimeDelta } from "../api.js";
+import { SideInitiativeAPI, getRoundTimeDelta, prepareSideTurn } from "../api.js";
 import { getCombatState, getOrderedSideIds } from "../logic.js";
 import type { CombatLike } from "../types.js";
 
@@ -10,6 +10,7 @@ type CombatPrototype = {
     nextTurn?: CombatMethod;
     previousTurn?: CombatMethod;
     nextRound?: CombatMethod;
+    startCombat?: CombatMethod;
     [PATCH_SYMBOL]?: boolean;
 };
 type CombatClass = { prototype: CombatPrototype };
@@ -42,6 +43,14 @@ export function installCombatPatches(): void {
     const originalNextTurn = CombatClass.prototype.nextTurn;
     const originalPreviousTurn = CombatClass.prototype.previousTurn;
     const originalNextRound = CombatClass.prototype.nextRound;
+    const originalStartCombat = CombatClass.prototype.startCombat;
+
+    CombatClass.prototype.startCombat = async function (this: CombatLike, ...args: unknown[]) {
+        if (isSideCombat(this)) {
+            await prepareSideTurn({ combat: this, sideId: getCombatState(this).activeSideId });
+        }
+        return originalStartCombat?.apply(this, args) ?? this;
+    };
 
     CombatClass.prototype.nextTurn = async function (this: CombatLike, ...args: unknown[]) {
         if (isSideCombat(this)) {

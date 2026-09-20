@@ -155,6 +155,7 @@ export interface CombatLike extends Flaggable {
     started?: boolean;
     combatant?: CombatantLike | null;
     current?: Record<string, any> & { tokenId?: string | null };
+    previous?: Record<string, any> & { round?: number };
     combatants?: CombatantsCollection | CombatantLike[] | Map<string, CombatantLike>;
     turns?: CombatantsCollection | CombatantLike[] | Map<string, CombatantLike>;
     groups?: Record<string, any> & {

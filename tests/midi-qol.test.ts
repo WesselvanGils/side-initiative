@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { registerMidiQolIntegration } from "../src/integration/midi-qol.js";
+import { configureSideReaction, registerMidiQolIntegration } from "../src/integration/midi-qol.js";
+import { SideInitiativeAPI } from "../src/api.js";
 
 function createCombatant({ id, sideId, actor, defeated = false }) {
     return {
@@ -80,6 +81,28 @@ function installGlobals({ combat, midiQol = {} } = {}) {
         },
     };
 }
+
+test("MidiQOL preserves reactions configured to reset on rest or never", async () => {
+    for (const reactionsReset of ["rest", "never"]) {
+        const deletes = [];
+        const updates = [];
+        const actor = createReactionActor({ id: "member", deletes, updates });
+        actor.getFlag = () => ({ reactionsReset });
+        const combat = {
+            started: true,
+            combatants: [createCombatant({ id: "member", sideId: "players", actor })],
+        };
+        const env = installGlobals({ combat });
+        try {
+            registerMidiQolIntegration();
+            await env.hooks.get("side-initiative.sideTurnStart")[0]({ combat, sideId: "players" });
+            assert.deepEqual(deletes, []);
+            assert.deepEqual(updates, []);
+        } finally {
+            env.restore();
+        }
+    }
+});
 
 test("MidiQOL blocks reaction consumption for actors on the active side", async () => {
     const actor = { id: "actor-1", combatant: null };
@@ -452,6 +475,116 @@ test("MidiQOL clears a single used reaction effect when the API is unavailable",
                 },
             },
         ]);
+    } finally {
+        env.restore();
+    }
+});
+
+test("v14 off-side save and utility actions consume reactions without affecting own-side or excluded uses", () => {
+    const actor = { id: "caster", uuid: "Actor.caster" };
+    const combatant = createCombatant({ id: "caster-token", sideId: "monsters", actor });
+    actor.combatant = combatant;
+    let side = "players";
+    const combat = { started: true, combatants: [combatant], getFlag: () => ({ activeSideId: side }) };
+    const env = installGlobals({ combat });
+    try {
+        for (const type of ["save", "utility", "attack"]) {
+            const usage = {};
+            configureSideReaction({
+                workflow: { actor, activity: { type, effectiveActivationType: "action" } },
+                usage,
+            });
+            assert.equal(usage.midiOptions.workflowOptions.castUsesReaction, true);
+        }
+        const excluded = { midiOptions: { workflowOptions: { notReaction: true } } };
+        configureSideReaction({
+            workflow: { actor, activity: { effectiveActivationType: "action" } },
+            usage: excluded,
+        });
+        assert.equal(excluded.midiOptions.workflowOptions.castUsesReaction, undefined);
+        const legendary = {};
+        configureSideReaction({
+            workflow: { actor, activity: { effectiveActivationType: "legendary" } },
+            usage: legendary,
+        });
+        assert.equal(legendary.midiOptions.workflowOptions.castUsesReaction, undefined);
+        const resourceAction = {};
+        configureSideReaction({
+            workflow: {
+                actor,
+                activity: {
+                    effectiveActivationType: "action",
+                    consumption: { targets: [{ target: "resources.legact.value" }] },
+                },
+            },
+            usage: resourceAction,
+        });
+        assert.equal(resourceAction.midiOptions.workflowOptions.notReaction, true);
+        const automated = {};
+        configureSideReaction({
+            workflow: {
+                actor,
+                activity: { effectiveActivationType: "action", midiProperties: { automationOnly: true } },
+            },
+            usage: automated,
+        });
+        assert.equal(automated.midiOptions.workflowOptions.castUsesReaction, undefined);
+        side = "monsters";
+        const own = {};
+        configureSideReaction({ workflow: { actor, activity: { effectiveActivationType: "action" } }, usage: own });
+        assert.equal(own.midiOptions.workflowOptions.notReaction, true);
+        assert.equal(own.midiOptions.workflowOptions.castUsesReaction, false);
+        const outsider = {};
+        configureSideReaction({ workflow: { actor: { uuid: "Actor.outside" } }, usage: outsider });
+        assert.deepEqual(outsider, {});
+    } finally {
+        env.restore();
+    }
+});
+
+test("v14 deletes commander and member reactions before the native turn update can expire them", async () => {
+    const deletes = [];
+    const actors = ["commander", "member"].map((id) => createReactionActor({ id, deletes }));
+    const combatants = actors.map((actor, i) => createCombatant({ id: `c${i}`, actor, sideId: "monsters" }));
+    for (const actor of actors) {
+        actor.effects.get("dnd5ereaction000").delete = async () => {
+            await Promise.resolve();
+            assert.ok(actor.effects.has("dnd5ereaction000"), "must not delete a stale effect");
+            actor.effects.delete("dnd5ereaction000");
+            deletes.push(actor.id);
+        };
+    }
+    let state = { activeSideId: "players", order: ["players", "monsters"], commanderIds: { monsters: "c0" } };
+    let nativeUpdates = 0;
+    const combat = {
+        started: true,
+        round: 1,
+        turn: 0,
+        combatants,
+        turns: combatants,
+        getFlag: () => state,
+        async setFlag(_scope, _key, value) {
+            state = value;
+        },
+        async update() {
+            nativeUpdates++;
+            assert.equal(
+                actors.every((actor) => !actor.effects.has("dnd5ereaction000")),
+                true,
+            );
+        },
+    };
+    const env = installGlobals({ combat });
+    globalThis.game.release = { generation: 14 };
+    env.hooks.callAll = (name, payload) => {
+        for (const fn of env.hooks.get(name)) fn(payload);
+    };
+    try {
+        registerMidiQolIntegration();
+        await SideInitiativeAPI.setActiveSide(combat, "monsters");
+        assert.equal(nativeUpdates, 1);
+        assert.deepEqual(deletes, ["commander", "member"]);
+        assert.equal(env.hooks.get("side-initiative.sideTurnStart").length, 0);
     } finally {
         env.restore();
     }
