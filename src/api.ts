@@ -168,6 +168,16 @@ async function syncCombatToSide(
  * advances the turn and lets MidiQOL clear targets.
  */
 const sideTurnStartFlushers: Array<() => Promise<unknown>> = [];
+const sideTurnPreparers: Array<(payload: SideTurnPayload) => Promise<unknown>> = [];
+
+/** Finish resource cleanup before Foundry broadcasts a native turn update. */
+export function registerSideTurnPreparer(prepare: (payload: SideTurnPayload) => Promise<unknown>): void {
+    if (!sideTurnPreparers.includes(prepare)) sideTurnPreparers.push(prepare);
+}
+
+export async function prepareSideTurn(payload: SideTurnPayload): Promise<void> {
+    for (const prepare of sideTurnPreparers) await prepare(payload);
+}
 const sideTurnEndFlushers: Array<() => Promise<unknown>> = [];
 
 export function registerSideTurnStartFlusher(flusher: () => Promise<unknown>): void {
@@ -755,6 +765,7 @@ export const SideInitiativeAPI: SideInitiativeApi = {
         }
 
         await emitSideTurnEndHook(resolvedCombat, previousSideId, normalizedSideId);
+        await prepareSideTurn({ combat: resolvedCombat, sideId: normalizedSideId });
         const state = getCombatState(resolvedCombat);
         state.activeSideId = normalizedSideId;
         state.activeSideIndex = Math.max(0, getOrderedSideIds(resolvedCombat).indexOf(normalizedSideId));
@@ -774,6 +785,7 @@ export const SideInitiativeAPI: SideInitiativeApi = {
         const ordered = getOrderedSideIds(resolvedCombat);
         const roundDelta = getNextRoundDelta(currentSideId, nextSideId, direction, ordered);
         await emitSideTurnEndHook(resolvedCombat, currentSideId, nextSideId);
+        await prepareSideTurn({ combat: resolvedCombat, sideId: nextSideId });
         const state = getCombatState(resolvedCombat);
         state.activeSideId = nextSideId;
         state.activeSideIndex = Math.max(0, ordered.indexOf(nextSideId));

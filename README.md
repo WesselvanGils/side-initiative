@@ -27,7 +27,9 @@ Commander changes default to side owners and can be restricted to the GM in the 
 ## MidiQOL notes
 
 - This module uses `midi-qol.preSetReactionUsed` to suppress reaction consumption for actors on the active side.
+- On v14, off-side Actions (including save and utility spells) consume a reaction through MidiQOL's workflow; legendary actions and workflows explicitly marked `notReaction` retain their normal behavior.
 - Used reactions are cleared again when a side becomes active so characters regain reaction access on their next turn. Reactions configured to reset on rests or never are preserved.
+- On v14, side reaction cleanup completes before Foundry's native turn update, preventing simultaneous effect expiry and deletion.
 - Start of turn and end of turn triggers need special attention because when a side starts their collective turn this doesn't proc individual actors.
 
 ## Chris' Premades notes
