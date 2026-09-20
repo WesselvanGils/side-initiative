@@ -14,7 +14,7 @@ function handleSideTurnStart({ combat, sideId }: SideTurnPayload = {}): Promise<
     return pendingSideTurnStart;
 }
 
-function flushSideTurnStart(): Promise<void> {
+export function flushMidiSideTurnStart(): Promise<void> {
     return pendingSideTurnStart;
 }
 
@@ -68,6 +68,8 @@ function collectCombatantActors(combatant: CombatantLike | null | undefined): Ac
 
 async function resetReactionUsed(actor: ActorLike | null | undefined): Promise<void> {
     if (!actor) return;
+    const actions = actor.getFlag?.("midi-qol", "actions") as { reactionsReset?: string } | undefined;
+    if (actions?.reactionsReset === "rest" || actions?.reactionsReset === "never") return;
 
     try {
         await actor.effects?.get?.(REACTION_EFFECT_ID)?.delete?.();
@@ -142,5 +144,5 @@ export function registerMidiQolIntegration(): void {
     });
 
     hooks()?.on("side-initiative.sideTurnStart", handleSideTurnStart);
-    registerSideTurnStartFlusher(flushSideTurnStart);
+    registerSideTurnStartFlusher(flushMidiSideTurnStart);
 }

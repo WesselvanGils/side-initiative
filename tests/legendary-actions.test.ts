@@ -638,3 +638,45 @@ test("selecting a legendary action executes it via CPR workflowUtils.completeIte
         env.restore();
     }
 });
+
+test("CAT legendary actions use its dialog result and TokenDocument target arguments", async () => {
+    const pcActor = makeActor({ id: "pc" });
+    const leg = legendaryItem({ id: "leg-cat" });
+    const monster = makeActor({ id: "monster", items: [leg], legact: 3 });
+    const pc = makeCombatant({ id: "pc", sideId: "players", actor: pcActor });
+    pcActor.combatant = pc;
+    const combat = makeCombat([pc, makeCombatant({ id: "npc", sideId: "monsters", actor: monster })], "players");
+    const env = installGlobals({ combat, dialogResult: { buttons: "leg-cat" } });
+    const originalCat = (globalThis as any).cat;
+    const target = { id: "target", uuid: "Scene.test.Token.target" };
+    const calls: any[] = [];
+    const legacy = (globalThis as any).chrisPremades;
+    (globalThis as any).cat = {
+        applications: { DialogApp: legacy.DialogApp },
+        utils: {
+            actorUtils: { getFirstToken: () => ({ id: "source" }) },
+            tokenUtils: {
+                findNearby: (_token: unknown, _range: unknown, options: unknown) => {
+                    assert.deepEqual(options, { disposition: "enemy" });
+                    return [target, { id: "other" }];
+                },
+            },
+            dialogUtils: { selectTargetDialog: async () => ({ result: target, skip: true }) },
+            workflowUtils: { completeItemUse: async (...args: any[]) => calls.push(args) },
+        },
+    };
+    const getModule = game.modules.get;
+    (game.modules as any).get = (id: string) => (id === "cat" ? { active: true } : getModule(id));
+    try {
+        resetLegendaryActionsIntegrationState();
+        registerLegendaryActionsIntegration();
+        await env.hooks.get("midi-qol.RollComplete")[0](
+            makeWorkflow({ actor: pcActor, activationType: "action", activityType: "cast", item: { type: "spell" } }),
+        );
+        assert.equal(calls.length, 1);
+        assert.deepEqual(calls[0], [leg, [target]]);
+    } finally {
+        (globalThis as any).cat = originalCat;
+        env.restore();
+    }
+});

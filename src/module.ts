@@ -8,6 +8,7 @@ import {
 import { SideInitiativeAPI, registerSideInitiativeSocket } from "./api.js";
 import { installCombatPatches } from "./controller/combat-controller.js";
 import { registerChrisPremadesIntegration } from "./integration/chris-premades.js";
+import { registerCatIntegration } from "./integration/cat.js";
 import { registerDnd5eIntegration } from "./integration/dnd5e.js";
 import { registerGambitsPremadesIntegration } from "./integration/gambits-premades.js";
 import { registerLegendaryActionsIntegration } from "./integration/legendary-actions.js";
@@ -211,8 +212,9 @@ Hooks.once("ready", () => {
     }
     getCombatDock().requestRefresh();
     registerDnd5eIntegration();
-    registerGambitsPremadesIntegration();
-    if (game?.modules?.get?.("chris-premades")?.active) {
+    if (Number(game?.release?.generation) < 14) registerGambitsPremadesIntegration();
+    if (game?.modules?.get?.("cat")?.active) registerCatIntegration();
+    if (game?.modules?.get?.("chris-premades")?.active && !game?.modules?.get?.("cat")?.active) {
         registerChrisPremadesIntegration();
     }
     if (game?.modules?.get?.("midi-qol")?.active) {

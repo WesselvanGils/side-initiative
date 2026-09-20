@@ -81,6 +81,28 @@ function installGlobals({ combat, midiQol = {} } = {}) {
     };
 }
 
+test("MidiQOL preserves reactions configured to reset on rest or never", async () => {
+    for (const reactionsReset of ["rest", "never"]) {
+        const deletes = [];
+        const updates = [];
+        const actor = createReactionActor({ id: "member", deletes, updates });
+        actor.getFlag = () => ({ reactionsReset });
+        const combat = {
+            started: true,
+            combatants: [createCombatant({ id: "member", sideId: "players", actor })],
+        };
+        const env = installGlobals({ combat });
+        try {
+            registerMidiQolIntegration();
+            await env.hooks.get("side-initiative.sideTurnStart")[0]({ combat, sideId: "players" });
+            assert.deepEqual(deletes, []);
+            assert.deepEqual(updates, []);
+        } finally {
+            env.restore();
+        }
+    }
+});
+
 test("MidiQOL blocks reaction consumption for actors on the active side", async () => {
     const actor = { id: "actor-1", combatant: null };
     const activeCombatant = createCombatant({ id: "pc-1", sideId: "players", actor });

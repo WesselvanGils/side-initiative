@@ -2,6 +2,15 @@ import type { SideInitiativeApi } from "./api.js";
 import type { GambitsPremadesApi } from "./types/augmentations.js";
 import type { UserLike } from "./types.js";
 
+export function getGame(): typeof game | undefined {
+    return (globalThis as unknown as { game?: typeof game }).game;
+}
+
+/** CAT exposes its live utility objects for automation modules. */
+export function getCat(): any | undefined {
+    return (globalThis as { cat?: any }).cat;
+}
+
 /**
  * Runtime accessors for Foundry globals whose fvtt-types shapes are awkward for
  * this module's defensive usage:

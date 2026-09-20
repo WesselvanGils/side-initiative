@@ -6,7 +6,7 @@ import {
     isActorOnActiveSide,
     isSideCombat,
 } from "../logic.js";
-import { getSetting, hooks, isPrimaryGMClient } from "../runtime.js";
+import { getCat, getSetting, hooks, isPrimaryGMClient } from "../runtime.js";
 import type { ActorLike, CombatLike, CombatantLike, WorkflowLike } from "../types.js";
 import { MODULE_ID, SETTINGS } from "../constants.js";
 
@@ -68,6 +68,10 @@ function debug(...parts: unknown[]): void {
 }
 
 function getCpr(): any | null {
+    const cat = getCat();
+    if (game?.modules?.get?.("cat")?.active && cat) {
+        return { DialogApp: cat.applications?.DialogApp, utils: cat.utils };
+    }
     return (globalThis as { chrisPremades?: any }).chrisPremades ?? null;
 }
 
@@ -392,6 +396,8 @@ async function executeLegendaryAction(item: any, actor: ActorLike, utils: any): 
     const activityWithType = activities.find((activity) => activity?.type);
     const actionType = activityWithType?.type;
     const options: { targetUuids?: unknown[] } = {};
+    const cat = game?.modules?.get?.("cat")?.active ? getCat() : undefined;
+    let selectedTargets: any[] = [];
 
     const needsTarget =
         (["attack", "save"].includes(actionType) ||
@@ -404,7 +410,7 @@ async function executeLegendaryAction(item: any, actor: ActorLike, utils: any): 
         if (token && typeof utils?.tokenUtils?.findNearby === "function") {
             const range = item?.system?.range?.reach ?? item?.system?.range?.value ?? undefined;
             const disposition = ["attack", "save"].includes(actionType) ? "enemy" : undefined;
-            const nearby = utils.tokenUtils.findNearby(token, range, disposition);
+            const nearby = utils.tokenUtils.findNearby(token, range, cat ? { disposition } : disposition);
             let target: unknown;
             if (
                 Array.isArray(nearby) &&
@@ -418,17 +424,28 @@ async function executeLegendaryAction(item: any, actor: ActorLike, utils: any): 
                     nearby,
                     { userId: game?.user?.id },
                 );
-                target = Array.isArray(picked) && picked[0] ? [picked[0]] : undefined;
+                target = cat
+                    ? picked?.result
+                        ? [picked.result]
+                        : undefined
+                    : Array.isArray(picked) && picked[0]
+                      ? [picked[0]]
+                      : undefined;
             } else if (Array.isArray(nearby) && nearby.length === 1) {
                 target = nearby;
             }
             if (target) {
+                selectedTargets = target as any[];
                 options.targetUuids = (target as any[]).map((entry) => entry?.document?.uuid ?? entry?.uuid);
             }
         }
     }
 
-    await utils.workflowUtils.completeItemUse(item, {}, options);
+    if (cat) {
+        await utils.workflowUtils.completeItemUse(item, selectedTargets);
+    } else {
+        await utils.workflowUtils.completeItemUse(item, {}, options);
+    }
 }
 
 /* ------------------------------------------------------------------ */

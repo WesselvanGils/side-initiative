@@ -1,5 +1,6 @@
 {
     "SIDE-INITIATIVE.ModuleName": "Side Initiative",
+    "SIDE-INITIATIVE.Notifications.CatUnsupported": "Side Initiative cannot integrate with this CAT version or combat API. Supported CAT version: 0.0.7.",
     "SIDE-INITIATIVE.Settings.GroupByDisposition.Name": "Default side grouping by disposition",
     "SIDE-INITIATIVE.Settings.GroupByDisposition.Hint": "Use token ownership and disposition to suggest an initial side assignment.",
     "SIDE-INITIATIVE.Settings.ShowTrackerControls.Name": "Show tracker controls",

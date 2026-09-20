@@ -27,19 +27,23 @@ Commander changes default to side owners and can be restricted to the GM in the 
 ## MidiQOL notes
 
 - This module uses `midi-qol.preSetReactionUsed` to suppress reaction consumption for actors on the active side.
-- Used reactions are cleared again when a side becomes active so characters regain reaction access on their next turn.
+- Used reactions are cleared again when a side becomes active so characters regain reaction access on their next turn. Reactions configured to reset on rests or never are preserved.
 - Start of turn and end of turn triggers need special attention because when a side starts their collective turn this doesn't proc individual actors.
 
 ## Chris' Premades notes
 
-- The side-turn bridge is enabled only for Chris' Premades **1.5.40**.
-- The integration also validates the CPR macro API and private `updateCombat`
+- **Foundry v14:** tested with D&D 5e **5.3.3**, MidiQOL **14.0.12**, CPR **2.0.2 prerelease**, and Coven's Automation Toolkit (CAT) **0.0.7**. Install and enable CPR's dependencies, including CAT, DAE, libWrapper, and socketlib.
+- CPR 2 delegates its automation to CAT. Side Initiative reuses CAT's native combat dispatcher for every living member of the side, including region activities and registered CPR macros. Dispatch is serialized and awaited; `everyTurn` runs once per scene token, and commander changes do not repeat turn events. CAT's own-turn checks recognize every member of the active side.
+- The CAT bridge is guarded by version **0.0.7** and the installed combat handler's source shape. Unsupported builds warn the GM and retain native CAT behavior.
+- **Foundry v13:** the legacy side-turn bridge remains available for Chris' Premades **1.5.40**.
+- The legacy integration also validates the CPR macro API and private `updateCombat`
   hook source before registering. Unsupported versions or source shapes disable
   the bridge and warn the GM instead of risking duplicate or incorrectly
   targeted workflows.
 
 ## Gambits Premades notes
 
+- Gambits integration is disabled on Foundry v14. The following applies to v13 only.
 - Side Initiative patches Gambits Premades Opportunity Attack at runtime for the supported Gambits versions.
 - The patch is guarded: if the installed Gambits version or source shape does not match the supported build, integration is disabled internally and the GM is warned.
 - Side-turn hooks are bridged to Gambits region turn events for every combatant on the active side, not just the commander.
@@ -58,6 +62,8 @@ Because every creature on a side acts at once, Chris' Premades' usual end-of-tur
 Legendary actions are also recovered at the **start** of a side's turn for every creature on that side, complete with dnd5e's recovery chat card, and dnd5e's native end-of-turn recovery is suppressed for side combats so it only happens once. (dnd5e normally recovers them — with a chat card — at the end of a single creature's turn, which in side initiative only ever reaches the side's representative, so they recovered at the wrong time, posted the card at the wrong time, and other legendary creatures never recovered at all. This is always on for side combats; it is not tied to the Legendary Action Windows setting.)
 
 ## Combat Dock
+
+Combat Carousel compatibility is no longer supported; use the module's own dock or Foundry's standard tracker.
 
 Enable **Use combat dock** in the module settings to replace the per-combatant combat tracker with a compact, top-of-screen dock. It shows the **players'** commander on the left and the **monsters'** commander on the right, facing each other inside a fantasy frame, with the current round between them.
 
